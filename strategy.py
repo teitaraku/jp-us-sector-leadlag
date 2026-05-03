@@ -230,7 +230,7 @@ def _prepare_prior(
     """V0・C0・結合リターン DataFrame を構築して返す。"""
     V0 = build_V0()
     all_cc = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna(thresh=N // 2)
-    cfull_mask = all_cc.index < cfull_end
+    cfull_mask = all_cc.index <= cfull_end
     cfull_data = all_cc[cfull_mask] if cfull_mask.sum() > 100 else all_cc.iloc[:500]
     Cfull = np.nan_to_num(cfull_data.corr().values)
     np.fill_diagonal(Cfull, 1.0)
