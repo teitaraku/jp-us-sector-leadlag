@@ -39,6 +39,24 @@ def _load_data(start: str, end: str):
     return load_data(start, end)
 
 
+def _color_best(s: pd.Series):
+    if s.name in ("AR(%)", "R/R"):
+        best = s.max()
+    elif s.name == "MDD(%)":
+        best = s.min()
+    else:
+        return [""] * len(s)
+    return ["background-color:#c8f7c5" if v == best else "" for v in s]
+
+
+def _highlight_action(row):
+    if "ロング" in str(row["売買"]):
+        return ["background-color:#c8f7c5; color:#000000"] * len(row)
+    if "ショート" in str(row["売買"]):
+        return ["background-color:#f7c8c8; color:#000000"] * len(row)
+    return [""] * len(row)
+
+
 _TAB_CSS = """
 <style>
 .stTabs [data-baseweb="tab-list"] {
@@ -565,16 +583,7 @@ def main() -> None:
             metrics = perf_metrics(rets)
             metrics.index = [STRAT_DISP.get(i, i) for i in metrics.index]
 
-            def color_best(s: pd.Series):
-                if s.name in ("AR(%)", "R/R"):
-                    best = s.max()
-                elif s.name == "MDD(%)":
-                    best = s.min()
-                else:
-                    return [""] * len(s)
-                return ["background-color:#c8f7c5" if v == best else "" for v in s]
-
-            st.dataframe(metrics.style.apply(color_best), width="stretch")
+            st.dataframe(metrics.style.apply(_color_best), width="stretch")
 
             # ── 累積リターン ──
             st.subheader("累積リターン推移")
@@ -768,15 +777,8 @@ def main() -> None:
 
             df_sig = pd.DataFrame(rows)
 
-            def highlight_action(row):
-                if "ロング" in str(row["売買"]):
-                    return ["background-color:#c8f7c5; color:#000000"] * len(row)
-                if "ショート" in str(row["売買"]):
-                    return ["background-color:#f7c8c8; color:#000000"] * len(row)
-                return [""] * len(row)
-
             st.dataframe(
-                df_sig.style.apply(highlight_action, axis=1),
+                df_sig.style.apply(_highlight_action, axis=1),
                 hide_index=True,
                 width="stretch",
                 height=36 * len(df_sig) + 38,

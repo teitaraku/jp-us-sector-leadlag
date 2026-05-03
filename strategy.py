@@ -222,6 +222,22 @@ def build_C0(V0: np.ndarray, Cfull: np.ndarray) -> np.ndarray:
     return C0
 
 
+def _prepare_prior(
+    us_cc: pd.DataFrame,
+    jp_cc: pd.DataFrame,
+    cfull_end: str,
+) -> tuple[np.ndarray, np.ndarray, pd.DataFrame]:
+    """V0・C0・結合リターン DataFrame を構築して返す。"""
+    V0 = build_V0()
+    all_cc = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna(thresh=N // 2)
+    cfull_mask = all_cc.index < cfull_end
+    cfull_data = all_cc[cfull_mask] if cfull_mask.sum() > 100 else all_cc.iloc[:500]
+    Cfull = np.nan_to_num(cfull_data.corr().values)
+    np.fill_diagonal(Cfull, 1.0)
+    C0 = build_C0(V0, Cfull)
+    return V0, C0, all_cc
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # バックテスト
 # ─────────────────────────────────────────────────────────────────────────────
@@ -240,15 +256,7 @@ def run_backtest(
     on_progress(step, total) は任意のプログレス通知コールバック。
     """
 
-    V0 = build_V0()
-
-    all_cc = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna(thresh=N // 2)
-
-    cfull_mask = all_cc.index < cfull_end
-    cfull_data = all_cc[cfull_mask] if cfull_mask.sum() > 100 else all_cc.iloc[:500]
-    Cfull = np.nan_to_num(cfull_data.corr().values)
-    np.fill_diagonal(Cfull, 1.0)
-    C0 = build_C0(V0, Cfull)
+    V0, C0, all_cc = _prepare_prior(us_cc, jp_cc, cfull_end)
 
     jp_dates_arr = jp_oc.index.values
     paired: list[tuple] = []
@@ -364,15 +372,7 @@ def compute_today_signal(
     cfull_end: str = "2014-12-31",
 ) -> dict:
     """最新の米国リターンから日本業種 ETF の売買シグナルを計算する。"""
-    V0 = build_V0()
-
-    all_cc = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna(thresh=N // 2)
-
-    cfull_mask = all_cc.index < cfull_end
-    cfull_data = all_cc[cfull_mask] if cfull_mask.sum() > 100 else all_cc.iloc[:500]
-    Cfull = np.nan_to_num(cfull_data.corr().values)
-    np.fill_diagonal(Cfull, 1.0)
-    C0 = build_C0(V0, Cfull)
+    V0, C0, all_cc = _prepare_prior(us_cc, jp_cc, cfull_end)
 
     us_valid = us_cc[US_TICKERS].dropna(how="all")
     if len(us_valid) == 0:
