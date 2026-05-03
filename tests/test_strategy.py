@@ -1,4 +1,5 @@
 """strategy.py のユニットテスト"""
+
 import numpy as np
 import pandas as pd
 
@@ -61,7 +62,7 @@ class TestBuildC0:
     def test_values_bounded(self):
         C0 = build_C0(self.V0, self.Cfull)
         assert np.all(C0 >= -1.0 - 1e-10)
-        assert np.all(C0 <=  1.0 + 1e-10)
+        assert np.all(C0 <= 1.0 + 1e-10)
 
 
 class TestPerfMetrics:
@@ -108,12 +109,15 @@ class TestRunBacktest:
         us_dates = pd.bdate_range("2016-01-04", periods=n, freq="B")
         jp_dates = pd.bdate_range("2016-01-04", periods=n + 1, freq="B")  # 末尾に 1 日余分
 
-        us_cc = pd.DataFrame(rng.standard_normal((n, NU)) * 0.01,
-                             index=us_dates, columns=US_TICKERS)
-        jp_cc = pd.DataFrame(rng.standard_normal((n + 1, NJ)) * 0.01,
-                             index=jp_dates, columns=JP_TICKERS)
-        jp_oc = pd.DataFrame(rng.standard_normal((n + 1, NJ)) * 0.01,
-                             index=jp_dates, columns=JP_TICKERS)
+        us_cc = pd.DataFrame(
+            rng.standard_normal((n, NU)) * 0.01, index=us_dates, columns=US_TICKERS
+        )
+        jp_cc = pd.DataFrame(
+            rng.standard_normal((n + 1, NJ)) * 0.01, index=jp_dates, columns=JP_TICKERS
+        )
+        jp_oc = pd.DataFrame(
+            rng.standard_normal((n + 1, NJ)) * 0.01, index=jp_dates, columns=JP_TICKERS
+        )
         return us_cc, jp_cc, jp_oc
 
     def test_output_columns(self):
@@ -129,8 +133,14 @@ class TestRunBacktest:
     def test_on_progress_called(self):
         us_cc, jp_cc, jp_oc = self._make_synthetic()
         calls = []
-        run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2015-12-31",
-                     on_progress=lambda s, t: calls.append((s, t)))
+        run_backtest(
+            us_cc,
+            jp_cc,
+            jp_oc,
+            L=30,
+            cfull_end="2015-12-31",
+            on_progress=lambda s, t: calls.append((s, t)),
+        )
         assert len(calls) > 0
 
     def test_lam_zero_vs_one_differ(self):

@@ -87,19 +87,19 @@ def main() -> None:
 
         st.markdown("---")
         start = st.date_input("開始日", value=pd.Timestamp("2010-01-01")).strftime("%Y-%m-%d")
-        end   = st.date_input("終了日", value=pd.Timestamp.today()).strftime("%Y-%m-%d")
-        L   = st.slider("推定ウィンドウ L（営業日）", 20, 252, 60, 5, key="L")
+        end = st.date_input("終了日", value=pd.Timestamp.today()).strftime("%Y-%m-%d")
+        L = st.slider("推定ウィンドウ L（営業日）", 20, 252, 60, 5, key="L")
         lam = st.slider("正則化パラメータ λ", 0.0, 1.0, 0.9, 0.05, key="lam")
-        K   = st.slider("主成分数 K", 1, 5, 3, key="K")
-        q   = st.slider("分位点 q（ロング/ショート比率）", 0.10, 0.45, 0.30, 0.05, key="q")
+        K = st.slider("主成分数 K", 1, 5, 3, key="K")
+        q = st.slider("分位点 q（ロング/ショート比率）", 0.10, 0.45, 0.30, 0.05, key="q")
 
         st.markdown("---")
         st.markdown("**論文パラメータ**: L=60, λ=0.9, K=3, q=0.3")
         if st.button("論文パラメータにリセット", use_container_width=True):
-            st.session_state["L"]   = 60
+            st.session_state["L"] = 60
             st.session_state["lam"] = 0.9
-            st.session_state["K"]   = 3
-            st.session_state["q"]   = 0.30
+            st.session_state["K"] = 3
+            st.session_state["q"] = 0.30
             st.rerun()
 
         st.markdown("---")
@@ -134,7 +134,9 @@ def main() -> None:
     # 概要
     # ═══════════════════════════════════════════════════
     with tab_over:
-        st.caption("初めての方はここから読んでください。毎日の操作手順から戦略の仕組みまで解説します。")
+        st.caption(
+            "初めての方はここから読んでください。毎日の操作手順から戦略の仕組みまで解説します。"
+        )
 
         # ── 毎日の操作フロー ──
         st.subheader("📋 毎日の操作フロー（3 ステップ）")
@@ -315,30 +317,34 @@ def main() -> None:
 
         st.subheader("比較戦略")
         st.dataframe(
-            pd.DataFrame({
-                "戦略": ["MOM", "PCA PLAIN", "PCA SUB（提案）", "DOUBLE"],
-                "説明": [
-                    "日本業種のウィンドウ内平均リターン（単純モメンタム）",
-                    "正則化なし PCA (λ=0) によるリードラグシグナル",
-                    "部分空間正則化付き PCA (λ=0.9) によるシグナル",
-                    "MOM と PCA SUB の 2×2 ダブルソート",
-                ],
-                "論文の結果（AR / R/R）": [
-                    "5.63% / 0.53",
-                    "6.24% / 0.62",
-                    "**23.79% / 2.22**",
-                    "18.86% / 1.69",
-                ],
-            }),
+            pd.DataFrame(
+                {
+                    "戦略": ["MOM", "PCA PLAIN", "PCA SUB（提案）", "DOUBLE"],
+                    "説明": [
+                        "日本業種のウィンドウ内平均リターン（単純モメンタム）",
+                        "正則化なし PCA (λ=0) によるリードラグシグナル",
+                        "部分空間正則化付き PCA (λ=0.9) によるシグナル",
+                        "MOM と PCA SUB の 2×2 ダブルソート",
+                    ],
+                    "論文の結果（AR / R/R）": [
+                        "5.63% / 0.53",
+                        "6.24% / 0.62",
+                        "**23.79% / 2.22**",
+                        "18.86% / 1.69",
+                    ],
+                }
+            ),
             hide_index=True,
-            width='stretch',
+            width="stretch",
         )
 
     # ═══════════════════════════════════════════════════
     # データ確認
     # ═══════════════════════════════════════════════════
     with tab_data:
-        st.caption("yfinance で取得した日米業種 ETF の価格データ・リターン分布・相関構造を確認できます。")
+        st.caption(
+            "yfinance で取得した日米業種 ETF の価格データ・リターン分布・相関構造を確認できます。"
+        )
         c1, c2 = st.columns(2)
 
         with c1:
@@ -347,9 +353,13 @@ def main() -> None:
             fig = go.Figure()
             for t in US_TICKERS:
                 if t in cum_us.columns:
-                    fig.add_trace(go.Scatter(x=cum_us.index, y=cum_us[t], name=US_LABEL[t], mode="lines"))
-            fig.update_layout(height=380, yaxis_title="累積リターン", legend=dict(font=dict(size=9)))
-            st.plotly_chart(fig, width='stretch')
+                    fig.add_trace(
+                        go.Scatter(x=cum_us.index, y=cum_us[t], name=US_LABEL[t], mode="lines")
+                    )
+            fig.update_layout(
+                height=380, yaxis_title="累積リターン", legend=dict(font=dict(size=9))
+            )
+            st.plotly_chart(fig, width="stretch")
 
         with c2:
             st.subheader("日本業種 ETF 累積リターン (OC)")
@@ -357,9 +367,13 @@ def main() -> None:
             fig = go.Figure()
             for t in JP_TICKERS:
                 if t in cum_jp.columns:
-                    fig.add_trace(go.Scatter(x=cum_jp.index, y=cum_jp[t], name=JP_LABEL[t], mode="lines"))
-            fig.update_layout(height=380, yaxis_title="累積リターン", legend=dict(font=dict(size=9)))
-            st.plotly_chart(fig, width='stretch')
+                    fig.add_trace(
+                        go.Scatter(x=cum_jp.index, y=cum_jp[t], name=JP_LABEL[t], mode="lines")
+                    )
+            fig.update_layout(
+                height=380, yaxis_title="累積リターン", legend=dict(font=dict(size=9))
+            )
+            st.plotly_chart(fig, width="stretch")
 
         st.subheader("日米業種間相関行列（CC ベース）")
         all_cc = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna()
@@ -368,9 +382,13 @@ def main() -> None:
             labels_all = [US_LABEL[t] for t in US_TICKERS] + [JP_LABEL[t] for t in JP_TICKERS]
             fig = go.Figure(
                 go.Heatmap(
-                    z=corr.values, x=labels_all, y=labels_all,
-                    colorscale="RdBu_r", zmid=0,
-                    text=corr.values.round(2), texttemplate="%{text}",
+                    z=corr.values,
+                    x=labels_all,
+                    y=labels_all,
+                    colorscale="RdBu_r",
+                    zmid=0,
+                    text=corr.values.round(2),
+                    texttemplate="%{text}",
                     textfont=dict(size=6),
                 )
             )
@@ -379,39 +397,49 @@ def main() -> None:
                 xaxis=dict(tickangle=45, tickfont=dict(size=8)),
                 yaxis=dict(tickfont=dict(size=8)),
             )
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, width="stretch")
 
         st.subheader("基本統計量")
         c1, c2 = st.columns(2)
         with c1:
             st.write("**米国業種 ETF（CC ベース）**")
-            us_st = pd.DataFrame({
-                "年率リターン(%)": (us_cc[US_TICKERS].mean() * 252 * 100).round(2),
-                "年率ボラ(%)":     (us_cc[US_TICKERS].std() * np.sqrt(252) * 100).round(2),
-                "Sharpe":         (us_cc[US_TICKERS].mean() / us_cc[US_TICKERS].std() * np.sqrt(252)).round(2),
-                "Skew":           us_cc[US_TICKERS].skew().round(2),
-                "Kurt":           us_cc[US_TICKERS].kurt().round(2),
-            })
+            us_st = pd.DataFrame(
+                {
+                    "年率リターン(%)": (us_cc[US_TICKERS].mean() * 252 * 100).round(2),
+                    "年率ボラ(%)": (us_cc[US_TICKERS].std() * np.sqrt(252) * 100).round(2),
+                    "Sharpe": (
+                        us_cc[US_TICKERS].mean() / us_cc[US_TICKERS].std() * np.sqrt(252)
+                    ).round(2),
+                    "Skew": us_cc[US_TICKERS].skew().round(2),
+                    "Kurt": us_cc[US_TICKERS].kurt().round(2),
+                }
+            )
             us_st.index = [US_LABEL[t] for t in US_TICKERS]
-            st.dataframe(us_st, width='stretch')
+            st.dataframe(us_st, width="stretch")
 
         with c2:
             st.write("**日本業種 ETF（OC ベース）**")
-            jp_st = pd.DataFrame({
-                "年率リターン(%)": (jp_oc[JP_TICKERS].mean() * 252 * 100).round(2),
-                "年率ボラ(%)":     (jp_oc[JP_TICKERS].std() * np.sqrt(252) * 100).round(2),
-                "Sharpe":         (jp_oc[JP_TICKERS].mean() / jp_oc[JP_TICKERS].std() * np.sqrt(252)).round(2),
-                "Skew":           jp_oc[JP_TICKERS].skew().round(2),
-                "Kurt":           jp_oc[JP_TICKERS].kurt().round(2),
-            })
+            jp_st = pd.DataFrame(
+                {
+                    "年率リターン(%)": (jp_oc[JP_TICKERS].mean() * 252 * 100).round(2),
+                    "年率ボラ(%)": (jp_oc[JP_TICKERS].std() * np.sqrt(252) * 100).round(2),
+                    "Sharpe": (
+                        jp_oc[JP_TICKERS].mean() / jp_oc[JP_TICKERS].std() * np.sqrt(252)
+                    ).round(2),
+                    "Skew": jp_oc[JP_TICKERS].skew().round(2),
+                    "Kurt": jp_oc[JP_TICKERS].kurt().round(2),
+                }
+            )
             jp_st.index = [JP_LABEL[t] for t in JP_TICKERS]
-            st.dataframe(jp_st, width='stretch')
+            st.dataframe(jp_st, width="stretch")
 
     # ═══════════════════════════════════════════════════
     # シグナル分析
     # ═══════════════════════════════════════════════════
     with tab_sig:
-        st.caption("アルゴリズム内部で使用する事前固有ベクトル V₀・エクスポージャー行列 C₀・正則化相関行列 C_reg を可視化します。")
+        st.caption(
+            "アルゴリズム内部で使用する事前固有ベクトル V₀・エクスポージャー行列 C₀・正則化相関行列 C_reg を可視化します。"
+        )
         V0 = build_V0()
         labels_all = [US_LABEL[t] for t in US_TICKERS] + [JP_LABEL[t] for t in JP_TICKERS]
         bar_colors = ["#1f77b4"] * NU + ["#d62728"] * NJ
@@ -422,11 +450,12 @@ def main() -> None:
         for k in range(3):
             fig_v0.add_trace(
                 go.Bar(x=labels_all, y=V0[:, k], marker_color=bar_colors, showlegend=False),
-                row=1, col=k + 1,
+                row=1,
+                col=k + 1,
             )
         fig_v0.update_xaxes(tickangle=45, tickfont=dict(size=7))
         fig_v0.update_layout(height=380)
-        st.plotly_chart(fig_v0, width='stretch')
+        st.plotly_chart(fig_v0, width="stretch")
 
         all_cc_full = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna()
         cfull_data = all_cc_full[all_cc_full.index < "2015-01-01"]
@@ -439,9 +468,13 @@ def main() -> None:
         st.subheader("事前エクスポージャー行列 C₀")
         fig_c0 = go.Figure(
             go.Heatmap(
-                z=C0, x=labels_all, y=labels_all,
-                colorscale="RdBu_r", zmid=0,
-                text=C0.round(2), texttemplate="%{text}",
+                z=C0,
+                x=labels_all,
+                y=labels_all,
+                colorscale="RdBu_r",
+                zmid=0,
+                text=C0.round(2),
+                texttemplate="%{text}",
                 textfont=dict(size=6),
             )
         )
@@ -450,7 +483,7 @@ def main() -> None:
             xaxis=dict(tickangle=45, tickfont=dict(size=8)),
             yaxis=dict(tickfont=dict(size=8)),
         )
-        st.plotly_chart(fig_c0, width='stretch')
+        st.plotly_chart(fig_c0, width="stretch")
 
         st.subheader("正則化相関行列の比較（直近ウィンドウ）")
         recent = all_cc_full.iloc[-L:]
@@ -465,28 +498,36 @@ def main() -> None:
 
             c1, c2 = st.columns(2)
             for col, mat, title in [
-                (c1, Ct_recent,    f"C_t（直近 {L} 日）"),
+                (c1, Ct_recent, f"C_t（直近 {L} 日）"),
                 (c2, C_reg_recent, f"C_reg（λ={lam}）"),
             ]:
                 with col:
                     fig = go.Figure(
                         go.Heatmap(
-                            z=mat, x=labels_all, y=labels_all,
-                            colorscale="RdBu_r", zmid=0, zmin=-1, zmax=1,
+                            z=mat,
+                            x=labels_all,
+                            y=labels_all,
+                            colorscale="RdBu_r",
+                            zmid=0,
+                            zmin=-1,
+                            zmax=1,
                         )
                     )
                     fig.update_layout(
-                        height=500, title=title,
+                        height=500,
+                        title=title,
                         xaxis=dict(tickangle=45, tickfont=dict(size=7)),
                         yaxis=dict(tickfont=dict(size=7)),
                     )
-                    st.plotly_chart(fig, width='stretch')
+                    st.plotly_chart(fig, width="stretch")
 
     # ═══════════════════════════════════════════════════
     # バックテスト
     # ═══════════════════════════════════════════════════
     with tab_bt:
-        st.caption("指定した期間・パラメータで 4 戦略のパフォーマンスを検証します。「バックテスト実行」を押すと計算が始まります。")
+        st.caption(
+            "指定した期間・パラメータで 4 戦略のパフォーマンスを検証します。「バックテスト実行」を押すと計算が始まります。"
+        )
         if st.button("🚀 バックテスト実行", type="primary"):
             with st.spinner("計算中…"):
                 try:
@@ -496,7 +537,13 @@ def main() -> None:
                         prog.progress(step / total, text=f"バックテスト実行中… {step}/{total}")
 
                     rets = run_backtest(
-                        us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q,
+                        us_cc,
+                        jp_cc,
+                        jp_oc,
+                        L=L,
+                        lam=lam,
+                        K=K,
+                        q=q,
                         on_progress=on_progress,
                     )
                     prog.empty()
@@ -505,133 +552,168 @@ def main() -> None:
                 except Exception as exc:
                     st.error(f"エラー: {exc}")
                     import traceback
+
                     st.code(traceback.format_exc())
 
         if "rets" not in st.session_state:
             st.info("「バックテスト実行」ボタンを押してください。")
-            return
+        else:
+            rets: pd.DataFrame = st.session_state["rets"]
 
-        rets: pd.DataFrame = st.session_state["rets"]
+            # ── パフォーマンス指標 ──
+            st.subheader("パフォーマンス指標")
+            metrics = perf_metrics(rets)
+            metrics.index = [STRAT_DISP.get(i, i) for i in metrics.index]
 
-        # ── パフォーマンス指標 ──
-        st.subheader("パフォーマンス指標")
-        metrics = perf_metrics(rets)
-        metrics.index = [STRAT_DISP.get(i, i) for i in metrics.index]
+            def color_best(s: pd.Series):
+                if s.name in ("AR(%)", "R/R"):
+                    best = s.max()
+                elif s.name == "MDD(%)":
+                    best = s.min()
+                else:
+                    return [""] * len(s)
+                return ["background-color:#c8f7c5" if v == best else "" for v in s]
 
-        def color_best(s: pd.Series):
-            if s.name in ("AR(%)", "R/R"):
-                best = s.max()
-            elif s.name == "MDD(%)":
-                best = s.min()
-            else:
-                return [""] * len(s)
-            return ["background-color:#c8f7c5" if v == best else "" for v in s]
+            st.dataframe(metrics.style.apply(color_best), width="stretch")
 
-        st.dataframe(metrics.style.apply(color_best), width='stretch')
-
-        # ── 累積リターン ──
-        st.subheader("累積リターン推移")
-        cum = (1 + rets).cumprod()
-        fig_cum = go.Figure()
-        for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
-            if col in cum.columns:
-                fig_cum.add_trace(
-                    go.Scatter(
-                        x=cum.index, y=cum[col], name=STRAT_DISP[col],
-                        mode="lines", line=dict(color=STRAT_COLORS[col], width=2),
+            # ── 累積リターン ──
+            st.subheader("累積リターン推移")
+            cum = (1 + rets).cumprod()
+            fig_cum = go.Figure()
+            for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
+                if col in cum.columns:
+                    fig_cum.add_trace(
+                        go.Scatter(
+                            x=cum.index,
+                            y=cum[col],
+                            name=STRAT_DISP[col],
+                            mode="lines",
+                            line=dict(color=STRAT_COLORS[col], width=2),
+                        )
                     )
-                )
-        fig_cum.update_layout(
-            height=450, yaxis_title="累積リターン",
-            xaxis_title="日付", hovermode="x unified",
-            legend=dict(x=0.01, y=0.99),
-        )
-        st.plotly_chart(fig_cum, width='stretch')
-
-        # ── ドローダウン ──
-        st.subheader("ドローダウン")
-        fig_dd = go.Figure()
-        for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
-            if col in rets.columns:
-                r = rets[col].dropna()
-                cum_r = (1 + r).cumprod()
-                dd = (cum_r - cum_r.cummax()) / cum_r.cummax() * 100
-                fig_dd.add_trace(
-                    go.Scatter(
-                        x=dd.index, y=dd, name=STRAT_DISP[col],
-                        mode="lines", line=dict(color=STRAT_COLORS[col]),
-                    )
-                )
-        fig_dd.update_layout(
-            height=350, yaxis_title="ドローダウン (%)",
-            xaxis_title="日付", hovermode="x unified",
-        )
-        st.plotly_chart(fig_dd, width='stretch')
-
-        # ── 月次リターン・ヒートマップ（PCA SUB） ──
-        if "PCA_SUB" in rets.columns:
-            st.subheader("PCA SUB（提案）月次リターン (%)")
-            monthly = rets["PCA_SUB"].dropna().resample("ME").sum() * 100
-            df_m = pd.DataFrame({
-                "ret": monthly,
-                "Y": monthly.index.year,
-                "M": monthly.index.month,
-            })
-            pivot = df_m.pivot(index="Y", columns="M", values="ret")
-            pivot.columns = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-            fig_m = go.Figure(
-                go.Heatmap(
-                    z=pivot.values,
-                    x=pivot.columns.tolist(),
-                    y=pivot.index.tolist(),
-                    colorscale="RdYlGn", zmid=0,
-                    text=pivot.values.round(1), texttemplate="%{text}",
-                    colorbar=dict(title="%"),
-                )
+            fig_cum.update_layout(
+                height=450,
+                yaxis_title="累積リターン",
+                xaxis_title="日付",
+                hovermode="x unified",
+                legend=dict(x=0.01, y=0.99),
             )
-            fig_m.update_layout(height=430, xaxis_title="月", yaxis_title="年")
-            st.plotly_chart(fig_m, width='stretch')
+            st.plotly_chart(fig_cum, width="stretch")
 
-        # ── ローリング・シャープレシオ ──
-        st.subheader("ローリング・シャープレシオ（252 営業日）")
-        fig_sh = go.Figure()
-        for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
-            if col in rets.columns:
-                r = rets[col].dropna()
-                rs = r.rolling(252).mean() / r.rolling(252).std() * np.sqrt(252)
-                fig_sh.add_trace(
-                    go.Scatter(
-                        x=rs.index, y=rs, name=STRAT_DISP[col],
-                        mode="lines", line=dict(color=STRAT_COLORS[col]),
+            # ── ドローダウン ──
+            st.subheader("ドローダウン")
+            fig_dd = go.Figure()
+            for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
+                if col in rets.columns:
+                    r = rets[col].dropna()
+                    cum_r = (1 + r).cumprod()
+                    dd = (cum_r - cum_r.cummax()) / cum_r.cummax() * 100
+                    fig_dd.add_trace(
+                        go.Scatter(
+                            x=dd.index,
+                            y=dd,
+                            name=STRAT_DISP[col],
+                            mode="lines",
+                            line=dict(color=STRAT_COLORS[col]),
+                        )
+                    )
+            fig_dd.update_layout(
+                height=350,
+                yaxis_title="ドローダウン (%)",
+                xaxis_title="日付",
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_dd, width="stretch")
+
+            # ── 月次リターン・ヒートマップ（PCA SUB） ──
+            if "PCA_SUB" in rets.columns:
+                st.subheader("PCA SUB（提案）月次リターン (%)")
+                monthly = rets["PCA_SUB"].dropna().resample("ME").sum() * 100
+                df_m = pd.DataFrame(
+                    {
+                        "ret": monthly,
+                        "Y": monthly.index.year,
+                        "M": monthly.index.month,
+                    }
+                )
+                pivot = df_m.pivot(index="Y", columns="M", values="ret")
+                pivot.columns = [
+                    "Jan",
+                    "Feb",
+                    "Mar",
+                    "Apr",
+                    "May",
+                    "Jun",
+                    "Jul",
+                    "Aug",
+                    "Sep",
+                    "Oct",
+                    "Nov",
+                    "Dec",
+                ]
+                fig_m = go.Figure(
+                    go.Heatmap(
+                        z=pivot.values,
+                        x=pivot.columns.tolist(),
+                        y=pivot.index.tolist(),
+                        colorscale="RdYlGn",
+                        zmid=0,
+                        text=pivot.values.round(1),
+                        texttemplate="%{text}",
+                        colorbar=dict(title="%"),
                     )
                 )
-        fig_sh.add_hline(y=0, line_dash="dash", line_color="gray")
-        fig_sh.update_layout(
-            height=350, yaxis_title="シャープレシオ（年率）",
-            xaxis_title="日付", hovermode="x unified",
-        )
-        st.plotly_chart(fig_sh, width='stretch')
+                fig_m.update_layout(height=430, xaxis_title="月", yaxis_title="年")
+                st.plotly_chart(fig_m, width="stretch")
 
-        # ── 年次リターン比較 ──
-        st.subheader("年次リターン比較 (%)")
-        annual = rets.resample("YE").sum() * 100
-        annual.index = annual.index.year
-        fig_ann = go.Figure()
-        for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
-            if col in annual.columns:
-                fig_ann.add_trace(
-                    go.Bar(
-                        x=annual.index, y=annual[col], name=STRAT_DISP[col],
-                        marker_color=STRAT_COLORS[col], opacity=0.8,
+            # ── ローリング・シャープレシオ ──
+            st.subheader("ローリング・シャープレシオ（252 営業日）")
+            fig_sh = go.Figure()
+            for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
+                if col in rets.columns:
+                    r = rets[col].dropna()
+                    rs = r.rolling(252).mean() / r.rolling(252).std() * np.sqrt(252)
+                    fig_sh.add_trace(
+                        go.Scatter(
+                            x=rs.index,
+                            y=rs,
+                            name=STRAT_DISP[col],
+                            mode="lines",
+                            line=dict(color=STRAT_COLORS[col]),
+                        )
                     )
-                )
-        fig_ann.update_layout(
-            height=380, barmode="group",
-            yaxis_title="年次リターン (%)", xaxis_title="年",
-        )
-        st.plotly_chart(fig_ann, width='stretch')
+            fig_sh.add_hline(y=0, line_dash="dash", line_color="gray")
+            fig_sh.update_layout(
+                height=350,
+                yaxis_title="シャープレシオ（年率）",
+                xaxis_title="日付",
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_sh, width="stretch")
 
+            # ── 年次リターン比較 ──
+            st.subheader("年次リターン比較 (%)")
+            annual = rets.resample("YE").sum() * 100
+            annual.index = annual.index.year
+            fig_ann = go.Figure()
+            for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
+                if col in annual.columns:
+                    fig_ann.add_trace(
+                        go.Bar(
+                            x=annual.index,
+                            y=annual[col],
+                            name=STRAT_DISP[col],
+                            marker_color=STRAT_COLORS[col],
+                            opacity=0.8,
+                        )
+                    )
+            fig_ann.update_layout(
+                height=380,
+                barmode="group",
+                yaxis_title="年次リターン (%)",
+                xaxis_title="年",
+            )
+            st.plotly_chart(fig_ann, width="stretch")
 
     # ═══════════════════════════════════════════════════
     # 今日のシグナル
@@ -644,18 +726,16 @@ def main() -> None:
         )
 
         try:
-            sig_result = compute_today_signal(
-                us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q
-            )
+            sig_result = compute_today_signal(us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q)
         except Exception as exc:
             st.error(f"シグナル計算に失敗しました: {exc}")
         else:
-            us_date     = sig_result["us_date"]
-            signal      = sig_result["signal"]
-            us_returns  = sig_result["us_returns"]
-            n_long      = sig_result["n_long"]
-            n_short     = sig_result["n_short"]
-            next_jp     = sig_result["next_jp_date"]
+            us_date = sig_result["us_date"]
+            signal = sig_result["signal"]
+            us_returns = sig_result["us_returns"]
+            n_long = sig_result["n_long"]
+            n_short = sig_result["n_short"]
+            next_jp = sig_result["next_jp_date"]
 
             next_jp_str = next_jp.strftime("%Y-%m-%d") if next_jp is not None else "データ範囲外"
 
@@ -676,13 +756,15 @@ def main() -> None:
                     action = "🔴 ショート"
                 else:
                     action = "─"
-                rows.append({
-                    "順位": rank,
-                    "銘柄": JP_LABEL[ticker],
-                    "コード": ticker,
-                    "シグナル値": round(float(val), 4),
-                    "売買": action,
-                })
+                rows.append(
+                    {
+                        "順位": rank,
+                        "銘柄": JP_LABEL[ticker],
+                        "コード": ticker,
+                        "シグナル値": round(float(val), 4),
+                        "売買": action,
+                    }
+                )
 
             df_sig = pd.DataFrame(rows)
 
@@ -696,7 +778,7 @@ def main() -> None:
             st.dataframe(
                 df_sig.style.apply(highlight_action, axis=1),
                 hide_index=True,
-                width='stretch',
+                width="stretch",
                 height=36 * len(df_sig) + 38,
             )
 
@@ -727,7 +809,7 @@ def main() -> None:
                 yaxis_title="シグナル値",
                 xaxis=dict(tickangle=45, tickfont=dict(size=10)),
             )
-            st.plotly_chart(fig_sig, width='stretch')
+            st.plotly_chart(fig_sig, width="stretch")
 
             # ── 米国入力リターン ──
             st.subheader(f"米国業種リターン（入力）: {us_date.strftime('%Y-%m-%d')}")
@@ -749,7 +831,7 @@ def main() -> None:
                 yaxis_title="リターン (%)",
                 xaxis=dict(tickangle=45),
             )
-            st.plotly_chart(fig_us, width='stretch')
+            st.plotly_chart(fig_us, width="stretch")
 
 
 if __name__ == "__main__":

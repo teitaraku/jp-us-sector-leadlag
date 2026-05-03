@@ -15,6 +15,12 @@ Nakagawa et al. (2026), JSAI SIG-FIN-036 の論文を実装・可視化する St
 ## コマンド
 
 ```bash
+# 仮想環境作成（初回のみ）
+python -m venv .venv
+
+# 仮想環境の有効化
+source .venv/bin/activate
+
 # 依存インストール
 pip install -r requirements.txt
 

@@ -15,8 +15,12 @@
 **前提条件**: Python 3.10 以上、インターネット接続（初回データ取得時）
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
+
+仮想環境を終了するには `deactivate` を実行します。
 
 ## 実行
 
@@ -25,3 +29,37 @@ python -m streamlit run dashboard.py
 ```
 
 ブラウザで http://localhost:8501 が開きます。初回起動時は yfinance によるデータダウンロードに数分かかる場合があります。ダウンロード済みデータは `data/` にキャッシュされます。
+
+## ディレクトリ構成
+
+```
+.
+├── dashboard.py        # Streamlit UI
+├── strategy.py         # 計算ロジック（Streamlit 非依存）
+├── requirements.txt    # 依存パッケージ
+├── pyproject.toml      # ruff 設定
+├── mise.toml           # Python バージョン管理
+├── tests/
+│   └── test_strategy.py
+├── data/               # parquet キャッシュ（自動生成・git 管理外）
+└── references/         # 論文 PDF
+
+```
+
+## テスト
+
+```bash
+pytest tests/
+```
+
+`strategy.py` の主要関数（`build_V0`・`build_C0`・`perf_metrics`・`run_backtest`）を合成データでユニットテストします。yfinance は使用しません。
+
+## フォーマット・リント
+
+[ruff](https://docs.astral.sh/ruff/) を使用しています（`line-length = 100`、isort 含む）。
+
+```bash
+ruff check .        # リント
+ruff check --fix .  # 自動修正
+ruff format .       # フォーマット
+```

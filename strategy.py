@@ -21,41 +21,75 @@ warnings.filterwarnings("ignore")
 # ─────────────────────────────────────────────────────────────────────────────
 US_TICKERS = ["XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLRE", "XLU", "XLV", "XLY"]
 JP_TICKERS = [
-    "1617.T", "1618.T", "1619.T", "1620.T", "1621.T", "1622.T", "1623.T",
-    "1624.T", "1625.T", "1626.T", "1627.T", "1628.T", "1629.T", "1630.T",
-    "1631.T", "1632.T", "1633.T",
+    "1617.T",
+    "1618.T",
+    "1619.T",
+    "1620.T",
+    "1621.T",
+    "1622.T",
+    "1623.T",
+    "1624.T",
+    "1625.T",
+    "1626.T",
+    "1627.T",
+    "1628.T",
+    "1629.T",
+    "1630.T",
+    "1631.T",
+    "1632.T",
+    "1633.T",
 ]
 
 US_LABEL = {
-    "XLB": "Materials", "XLC": "Comm Svcs", "XLE": "Energy",
-    "XLF": "Financials", "XLI": "Industrials", "XLK": "Info Tech",
-    "XLP": "Cons Staples", "XLRE": "Real Estate", "XLU": "Utilities",
-    "XLV": "Health Care", "XLY": "Cons Discret",
+    "XLB": "Materials",
+    "XLC": "Comm Svcs",
+    "XLE": "Energy",
+    "XLF": "Financials",
+    "XLI": "Industrials",
+    "XLK": "Info Tech",
+    "XLP": "Cons Staples",
+    "XLRE": "Real Estate",
+    "XLU": "Utilities",
+    "XLV": "Health Care",
+    "XLY": "Cons Discret",
 }
 JP_LABEL = {
-    "1617.T": "食品", "1618.T": "エネルギー資源", "1619.T": "建設・資材",
-    "1620.T": "素材・化学", "1621.T": "医薬品", "1622.T": "自動車・輸送機",
-    "1623.T": "鉄鋼・非鉄", "1624.T": "機械", "1625.T": "電機・精密",
-    "1626.T": "情報通信", "1627.T": "電力・ガス", "1628.T": "運輸・物流",
-    "1629.T": "商社・卸売", "1630.T": "小売", "1631.T": "銀行",
-    "1632.T": "金融(除く銀行)", "1633.T": "不動産",
+    "1617.T": "食品",
+    "1618.T": "エネルギー資源",
+    "1619.T": "建設・資材",
+    "1620.T": "素材・化学",
+    "1621.T": "医薬品",
+    "1622.T": "自動車・輸送機",
+    "1623.T": "鉄鋼・非鉄",
+    "1624.T": "機械",
+    "1625.T": "電機・精密",
+    "1626.T": "情報通信",
+    "1627.T": "電力・ガス",
+    "1628.T": "運輸・物流",
+    "1629.T": "商社・卸売",
+    "1630.T": "小売",
+    "1631.T": "銀行",
+    "1632.T": "金融(除く銀行)",
+    "1633.T": "不動産",
 }
 
-US_CYCLICAL  = {"XLB", "XLE", "XLF", "XLRE"}
+US_CYCLICAL = {"XLB", "XLE", "XLF", "XLRE"}
 US_DEFENSIVE = {"XLK", "XLP", "XLU", "XLV"}
-JP_CYCLICAL  = {"1618.T", "1625.T", "1629.T", "1631.T"}
+JP_CYCLICAL = {"1618.T", "1625.T", "1629.T", "1631.T"}
 JP_DEFENSIVE = {"1617.T", "1621.T", "1627.T", "1630.T"}
 
 NU = len(US_TICKERS)
 NJ = len(JP_TICKERS)
-N  = NU + NJ
+N = NU + NJ
 
 DATA_DIR = Path(__file__).parent / "data"
 
 STRAT_COLORS = {"PCA_SUB": "blue", "DOUBLE": "green", "PCA_PLAIN": "orange", "MOM": "red"}
-STRAT_DISP   = {
-    "PCA_SUB": "PCA SUB（提案）", "DOUBLE": "DOUBLE",
-    "PCA_PLAIN": "PCA PLAIN", "MOM": "MOM",
+STRAT_DISP = {
+    "PCA_SUB": "PCA SUB（提案）",
+    "DOUBLE": "DOUBLE",
+    "PCA_PLAIN": "PCA PLAIN",
+    "MOM": "MOM",
 }
 
 
@@ -112,7 +146,7 @@ def load_data(start: str, end: str) -> tuple[pd.DataFrame, ...]:
     cache = {
         "us_close": DATA_DIR / "us_close.parquet",
         "jp_close": DATA_DIR / "jp_close.parquet",
-        "jp_open":  DATA_DIR / "jp_open.parquet",
+        "jp_open": DATA_DIR / "jp_open.parquet",
     }
     start_ts, end_ts = pd.Timestamp(start), pd.Timestamp(end)
 
@@ -154,7 +188,7 @@ def build_V0() -> np.ndarray:
     v1 = np.ones(N) / np.sqrt(N)
 
     v2 = np.zeros(N)
-    v2[:NU] =  1.0 / np.sqrt(NU)
+    v2[:NU] = 1.0 / np.sqrt(NU)
     v2[NU:] = -1.0 / np.sqrt(NJ)
     v2 -= np.dot(v2, v1) * v1
     v2 /= np.linalg.norm(v2)
@@ -208,11 +242,7 @@ def run_backtest(
 
     V0 = build_V0()
 
-    all_cc = (
-        us_cc[US_TICKERS]
-        .join(jp_cc[JP_TICKERS], how="inner")
-        .dropna(thresh=N // 2)
-    )
+    all_cc = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna(thresh=N // 2)
 
     cfull_mask = all_cc.index < cfull_end
     cfull_data = all_cc[cfull_mask] if cfull_mask.sum() > 100 else all_cc.iloc[:500]
@@ -249,7 +279,7 @@ def run_backtest(
         if np.isnan(window).mean() > 0.3:
             continue
 
-        mu    = np.nanmean(window, axis=0)
+        mu = np.nanmean(window, axis=0)
         sigma = np.nanstd(window, axis=0)
         sigma = np.where(sigma < 1e-10, 1e-10, sigma)
         z_win = np.nan_to_num((window - mu) / sigma)
@@ -295,9 +325,9 @@ def run_backtest(
             rank = np.argsort(s)
             return float(r[rank[-n_each:]].mean() - r[rank[:n_each]].mean())
 
-        r_mom   = ls_ret(mom_signal, target)
+        r_mom = ls_ret(mom_signal, target)
         r_plain = ls_ret(z_jp_plain, target)
-        r_sub   = ls_ret(z_jp_sub, target)
+        r_sub = ls_ret(z_jp_sub, target)
 
         mask = ~np.isnan(target)
         if mask.sum() >= 4:
@@ -306,9 +336,7 @@ def run_backtest(
             hi2 = s2 >= np.median(s2)
             lg, sh = hi1 & hi2, ~hi1 & ~hi2
             r_double = (
-                float(r[lg].mean() - r[sh].mean())
-                if lg.sum() > 0 and sh.sum() > 0
-                else np.nan
+                float(r[lg].mean() - r[sh].mean()) if lg.sum() > 0 and sh.sum() > 0 else np.nan
             )
         else:
             r_double = np.nan
@@ -338,11 +366,7 @@ def compute_today_signal(
     """最新の米国リターンから日本業種 ETF の売買シグナルを計算する。"""
     V0 = build_V0()
 
-    all_cc = (
-        us_cc[US_TICKERS]
-        .join(jp_cc[JP_TICKERS], how="inner")
-        .dropna(thresh=N // 2)
-    )
+    all_cc = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna(thresh=N // 2)
 
     cfull_mask = all_cc.index < cfull_end
     cfull_data = all_cc[cfull_mask] if cfull_mask.sum() > 100 else all_cc.iloc[:500]
@@ -405,11 +429,11 @@ def perf_metrics(rets: pd.DataFrame) -> pd.DataFrame:
         r = rets[col].dropna()
         if len(r) == 0:
             continue
-        ar   = r.mean() * 252 * 100
+        ar = r.mean() * 252 * 100
         risk = r.std() * np.sqrt(252) * 100
-        rr   = ar / risk if risk > 0 else 0.0
-        cum  = (1 + r).cumprod()
-        mdd  = ((cum - cum.cummax()) / cum.cummax()).min() * 100
+        rr = ar / risk if risk > 0 else 0.0
+        cum = (1 + r).cumprod()
+        mdd = ((cum - cum.cummax()) / cum.cummax()).min() * 100
         rows[col] = {
             "AR(%)": round(ar, 2),
             "RISK(%)": round(risk, 2),
