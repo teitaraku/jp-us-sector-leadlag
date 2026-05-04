@@ -45,16 +45,6 @@ def main() -> None:
             _load_data.clear()
             st.rerun()
 
-        strategy_mode = st.radio(
-            "戦略モード",
-            ["📄 論文戦略", "🧪 新戦略（実験中）"],
-            key="strategy_mode",
-            help="「論文戦略」は Nakagawa et al. (2026) の実装そのまま。"
-            "「新戦略（実験中）」は自由に改変可能な独立コピー。",
-            horizontal=True,
-        )
-        use_exp = strategy_mode == "🧪 新戦略（実験中）"
-
         st.markdown("---")
         today_dt = pd.Timestamp.today()
         start = st.date_input(
@@ -166,7 +156,7 @@ def main() -> None:
         backtest.render(us_cc, jp_cc, jp_oc, L, lam, K, q, start)
 
     with tab_today:
-        today.render(us_cc, jp_cc, jp_oc, L, lam, K, q, use_exp)
+        today.render(us_cc, jp_cc, jp_oc, L, lam, K, q)
 
 
 if __name__ == "__main__":
