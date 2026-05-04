@@ -91,6 +91,9 @@ _TAB_CSS = """
 .stTabs [data-baseweb="tab-highlight"] {
     display: none;
 }
+[data-testid="stMetricValue"] {
+    font-size: 1rem;
+}
 </style>
 """
 
@@ -421,6 +424,9 @@ def main() -> None:
 
         with c1:
             st.subheader("米国業種 ETF 累積リターン (CC)")
+            st.caption(
+                "SPDR 11 業種 ETF の Close-to-Close（前日終値→当日終値）リターンを累積した推移です。戦略の入力シグナル源となるデータです。"
+            )
             cum_us = (1 + us_cc[US_TICKERS]).cumprod()
             fig = go.Figure()
             for t in US_TICKERS:
@@ -435,6 +441,9 @@ def main() -> None:
 
         with c2:
             st.subheader("日本業種 ETF 累積リターン (OC)")
+            st.caption(
+                "NEXT FUNDS TOPIX-17 ETF の Open-to-Close（寄付→引け）リターンを累積した推移です。戦略が予測・売買するターゲットデータです。"
+            )
             cum_jp = (1 + jp_oc[JP_TICKERS]).cumprod()
             fig = go.Figure()
             for t in JP_TICKERS:
@@ -448,6 +457,9 @@ def main() -> None:
             st.plotly_chart(fig, width="stretch")
 
         st.subheader("日米業種間相関行列（CC ベース）")
+        st.caption(
+            "米国 11 業種 × 日本 17 業種の 28×28 全期間相関行列です。赤が正の相関、青が負の相関を示します。右上の米日ブロックがリードラグ構造の可視化です。"
+        )
         all_cc = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna()
         if len(all_cc) > 0:
             corr = all_cc.corr()
@@ -472,6 +484,9 @@ def main() -> None:
             st.plotly_chart(fig, width="stretch")
 
         st.subheader("基本統計量")
+        st.caption(
+            "全期間の年率リターン・ボラティリティ・シャープレシオ・歪度・尖度を業種別に集計しています。銘柄ごとのリターン特性や分布の非対称性を確認できます。"
+        )
         c1, c2 = st.columns(2)
         with c1:
             st.write("**米国業種 ETF（CC ベース）**")
@@ -518,6 +533,9 @@ def main() -> None:
         factor_titles = ["v₁: グローバル", "v₂: 国スプレッド", "v₃: シクリカル/DF"]
 
         st.subheader("事前固有ベクトル V₀（青=米国, 赤=日本）")
+        st.caption(
+            "正則化のアンカーとなる 3 本の事前固有ベクトルです。v₁ はすべての業種が同方向に動くグローバルファクター、v₂ は米国と日本が逆方向に動く国スプレッド、v₃ はシクリカル業種とディフェンシブ業種の対立軸を表します。"
+        )
         fig_v0 = make_subplots(rows=1, cols=3, subplot_titles=factor_titles)
         for k in range(3):
             fig_v0.add_trace(
@@ -538,6 +556,9 @@ def main() -> None:
         C0 = build_C0(V0, Cfull)
 
         st.subheader("事前エクスポージャー行列 C₀")
+        st.caption(
+            "V₀ を長期相関行列（2015 年以前）に射影して構築した 28×28 の事前エクスポージャー行列です。正則化の「目標値」として機能し、推定ノイズを抑制します。直近 Cₜ との混合比は λ で制御されます。"
+        )
         fig_c0 = go.Figure(
             go.Heatmap(
                 z=C0,
@@ -558,6 +579,9 @@ def main() -> None:
         st.plotly_chart(fig_c0, width="stretch")
 
         st.subheader("正則化相関行列の比較（直近ウィンドウ）")
+        st.caption(
+            f"直近 L={L} 日の実測相関行列 Cₜ（左）と、C₀ で正則化した C_reg（右）を並べて比較します。λ が大きいほど右図は C₀ に近づき、ノイズが平滑化された構造になります。"
+        )
         recent = all_cc_full.iloc[-L:]
         if len(recent) >= 10:
             mu_r = recent.mean().values
@@ -634,13 +658,47 @@ def main() -> None:
 
             # ── パフォーマンス指標 ──
             st.subheader("パフォーマンス指標")
+            st.caption(
+                "4 戦略の年率リターン（AR）・ボラティリティ（RISK）・リターン/リスク比（R/R）・最大ドローダウン（MDD）を比較します。"
+            )
             metrics = perf_metrics(rets)
-            metrics.index = [STRAT_DISP.get(i, i) for i in metrics.index]
 
-            st.dataframe(metrics.style.apply(_color_best), width="stretch")
+            _STRAT_HELP = {
+                "MOM": "モメンタム。米国業種リターンをそのまま日本業種シグナルに使うシンプルなベースライン。",
+                "PCA_PLAIN": "正則化なし PCA。日米結合相関行列を固有分解してリードラグシグナルを抽出。",
+                "PCA_SUB": "部分空間正則化 PCA（論文提案手法）。事前部分空間 V₀ を正則化のアンカーに用いた改良版。",
+                "DOUBLE": "ダブルソート。MOM と PCA SUB の両シグナルで 2 段階スクリーニングを行う複合戦略。",
+            }
+            _METRIC_HELP = {
+                "AR(%)": "Annualized Return（年率リターン）。日次リターンを年率換算した平均リターン。大きいほど高収益。",
+                "RISK(%)": "年率ボラティリティ。日次リターンの標準偏差を √252 倍した値。リターンのぶれの大きさ。小さいほど安定。",
+                "R/R": "Return/Risk 比（シャープレシオ相当）。AR ÷ RISK で計算。大きいほどリスクあたりの収益が効率的。",
+                "MDD(%)": "Maximum Drawdown（最大ドローダウン）。累積リターンが過去ピークから最大でどれだけ下落したか。小さいほど安定。",
+            }
+
+            for strat_key in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
+                if strat_key not in metrics.index:
+                    continue
+                row = metrics.loc[strat_key]
+                with st.container(border=True):
+                    name_col, ar_col, risk_col, rr_col, mdd_col = st.columns([2, 1, 1, 1, 1])
+                    name_col.metric(
+                        label=STRAT_DISP[strat_key],
+                        value="",
+                        help=_STRAT_HELP[strat_key],
+                    )
+                    ar_col.metric("AR (%)", f"{row['AR(%)']:.2f}", help=_METRIC_HELP["AR(%)"])
+                    risk_col.metric(
+                        "RISK (%)", f"{row['RISK(%)']:.2f}", help=_METRIC_HELP["RISK(%)"]
+                    )
+                    rr_col.metric("R/R", f"{row['R/R']:.2f}", help=_METRIC_HELP["R/R"])
+                    mdd_col.metric("MDD (%)", f"{row['MDD(%)']:.2f}", help=_METRIC_HELP["MDD(%)"])
 
             # ── 累積リターン ──
             st.subheader("累積リターン推移")
+            st.caption(
+                "バックテスト期間全体の累積リターン推移です。各戦略の長期的な収益性と成長ペースを比較できます。"
+            )
             cum = (1 + rets).cumprod()
             fig_cum = go.Figure()
             for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
@@ -665,6 +723,9 @@ def main() -> None:
 
             # ── ドローダウン ──
             st.subheader("ドローダウン")
+            st.caption(
+                "累積リターンが過去ピーク比でどれだけ下落したかを示します。谷が深いほど大きな損失局面があったことを意味します。"
+            )
             fig_dd = go.Figure()
             for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
                 if col in rets.columns:
@@ -691,6 +752,9 @@ def main() -> None:
             # ── 月次リターン・ヒートマップ（PCA SUB） ──
             if "PCA_SUB" in rets.columns:
                 st.subheader("PCA SUB（提案）月次リターン (%)")
+                st.caption(
+                    "論文提案手法（PCA SUB）の月次リターンを年×月のヒートマップで表示します。緑が利益月、赤が損失月です。季節性や特定年のパフォーマンスを直感的に把握できます。"
+                )
                 monthly = rets["PCA_SUB"].dropna().resample("ME").sum() * 100
                 df_m = pd.DataFrame(
                     {
@@ -731,6 +795,9 @@ def main() -> None:
 
             # ── ローリング・シャープレシオ ──
             st.subheader("ローリング・シャープレシオ（252 営業日）")
+            st.caption(
+                "直近 252 営業日（約 1 年）のローリング窓でシャープレシオを計算します。戦略の「稼ぐ力」が時代によってどう変化しているかを確認できます。0 を下回る期間はリスクに対してリターンが出ていない局面です。"
+            )
             fig_sh = go.Figure()
             for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
                 if col in rets.columns:
@@ -756,6 +823,9 @@ def main() -> None:
 
             # ── 年次リターン比較 ──
             st.subheader("年次リターン比較 (%)")
+            st.caption(
+                "各年の戦略別リターンを棒グラフで並べて比較します。特定の年に強い・弱い戦略の違いや、市場環境との関係を把握するのに役立ちます。"
+            )
             annual = rets.resample("YE").sum() * 100
             annual.index = annual.index.year
             fig_ann = go.Figure()
@@ -849,6 +919,12 @@ def main() -> None:
                     bar_colors.append("#95a5a6")
 
             st.subheader("シグナル強度")
+            st.caption(
+                "今日の米国業種リターン（z スコア）を、日米結合相関行列の上位 K 固有ベクトルで"
+                "日本業種空間へ射影した値です。"
+                "正の値ほど翌営業日の上昇を、負の値ほど下落を予測します。"
+                "緑がロング対象、赤がショート対象の業種です。"
+            )
             fig_sig = go.Figure(
                 go.Bar(
                     x=[JP_LABEL[t] for t in signal_sorted.index],
@@ -869,6 +945,11 @@ def main() -> None:
 
             # ── 米国入力リターン ──
             st.subheader(f"米国業種リターン（入力）: {us_date.strftime('%Y-%m-%d')}")
+            st.caption(
+                "シグナル計算に使った当日の米国業種 ETF の Close-to-Close リターン実績値です。"
+                "上のシグナル強度はこの米国リターンを入力として算出されます。"
+                "米国の動きがどの日本業種へ波及しているかを対比して確認できます。"
+            )
             us_vals = (us_returns.values * 100).tolist()
             us_colors = ["#e74c3c" if v < 0 else "#2ecc71" for v in us_vals]
             fig_us = go.Figure(
