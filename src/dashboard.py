@@ -107,9 +107,7 @@ def main() -> None:
 
         st.markdown("---")
         st.markdown("**PCA SUB(論文) 推奨パラメータ**: L=60, λ=0.9, K=3, q=0.3")
-        st.button(
-            "PCA SUB(論文) パラメータにリセット", on_click=_reset_params, width="stretch"
-        )
+        st.button("PCA SUB(論文) パラメータにリセット", on_click=_reset_params, width="stretch")
 
         st.markdown("---")
         st.markdown(
