@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.optimizer import optimize_parameters, parameter_combinations
 from src.strategies.core import (
     JP_TICKERS,
     NJ,
@@ -122,6 +123,43 @@ class TestPerfMetrics:
         metrics = perf_metrics(rets)
         assert "A" not in metrics.index
         assert "B" in metrics.index
+
+
+class TestOptimizeParameters:
+    def test_parameter_combinations(self):
+        combos = parameter_combinations({"L": [20, 60], "K": [2, 3]})
+        assert combos == [
+            {"L": 20, "K": 2},
+            {"L": 20, "K": 3},
+            {"L": 60, "K": 2},
+            {"L": 60, "K": 3},
+        ]
+
+    def test_sort_by_maximize_objective(self):
+        def runner(L, lam, K, q):
+            return pd.DataFrame({"S": [L / 1000, L / 1000, L / 1000]})
+
+        result = optimize_parameters(
+            runner,
+            {"L": [20, 60], "lam": [0.9], "K": [3], "q": [0.3]},
+            strategy_name="S",
+            objective="AR(%)",
+        )
+
+        assert result.iloc[0]["L"] == 60
+
+    def test_sort_by_minimize_objective(self):
+        def runner(L, lam, K, q):
+            return pd.DataFrame({"S": [0.01, -0.01] * L})
+
+        result = optimize_parameters(
+            runner,
+            {"L": [2, 10], "lam": [0.9], "K": [3], "q": [0.3]},
+            strategy_name="S",
+            objective="RISK(%)",
+        )
+
+        assert result.iloc[0]["L"] == 10
 
 
 class TestRunBacktest:

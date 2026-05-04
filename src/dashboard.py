@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from src.strategies.core import load_data
-from src.tabs import analysis, backtest, data, howto, today
+from src.tabs import analysis, backtest, data, howto, optimize, today
 from src.tabs.common import TAB_CSS
 
 st.set_page_config(
@@ -30,7 +30,15 @@ def _reset_params():
     st.session_state["q"] = 0.30
 
 
+def _init_params():
+    st.session_state.setdefault("L", 60)
+    st.session_state.setdefault("lam", 0.9)
+    st.session_state.setdefault("K", 3)
+    st.session_state.setdefault("q", 0.30)
+
+
 def main() -> None:
+    _init_params()
     st.markdown(TAB_CSS, unsafe_allow_html=True)
     st.title("📈 日米業種リードラグ投資戦略ダッシュボード")
     st.caption(
@@ -65,8 +73,7 @@ def main() -> None:
             "推定ウィンドウ L（営業日）",
             20,
             252,
-            60,
-            5,
+            step=5,
             key="L",
             help="相関行列 Cₜ を推定するローリングウィンドウの長さ（営業日数）。"
             "短くすると直近の相場変化への追従が速くなるが推定ノイズが増加する。"
@@ -76,8 +83,7 @@ def main() -> None:
             "正則化パラメータ λ",
             0.0,
             1.0,
-            0.9,
-            0.05,
+            step=0.05,
             key="lam",
             help="事前エクスポージャー行列 C₀ への正則化強度。"
             "C_reg = (1−λ)·Cₜ + λ·C₀ で混合される。"
@@ -87,7 +93,6 @@ def main() -> None:
             "主成分数 K",
             1,
             5,
-            3,
             key="K",
             help="正則化相関行列から抽出する上位固有ベクトルの本数。"
             "v₁（グローバルファクター）・v₂（国スプレッド）・v₃（シクリカル/DF）の 3 成分が基本。"
@@ -97,8 +102,7 @@ def main() -> None:
             "分位点 q（ロング/ショート比率）",
             0.10,
             0.45,
-            0.30,
-            0.05,
+            step=0.05,
             key="q",
             help="シグナル上位 q% をロング、下位 q% をショートとする閾値。"
             "q=0.30 かつ日本 ETF 17 銘柄の場合、ロング 5 銘柄・ショート 5 銘柄。"
@@ -137,8 +141,15 @@ def main() -> None:
     jp_oc_view = jp_oc.loc[start:]
 
     # ── タブ ─────────────────────────────────────────
-    tab_today, tab_bt, tab_data, tab_sig, tab_over = st.tabs(
-        ["🎯 今日のシグナル", "📈 バックテスト", "📊 データ", "🔬 モデル分析", "📖 使い方"]
+    tab_today, tab_bt, tab_opt, tab_data, tab_sig, tab_over = st.tabs(
+        [
+            "🎯 今日のシグナル",
+            "📈 バックテスト",
+            "🔎 パラメータ探索",
+            "📊 データ",
+            "🔬 モデル分析",
+            "📖 使い方",
+        ]
     )
 
     with tab_over:
@@ -152,6 +163,9 @@ def main() -> None:
 
     with tab_bt:
         backtest.render(us_cc, jp_cc, jp_oc, L, lam, K, q, start)
+
+    with tab_opt:
+        optimize.render(us_cc, jp_cc, jp_oc, start)
 
     with tab_today:
         today.render(us_cc, jp_cc, jp_oc, L, lam, K, q)
