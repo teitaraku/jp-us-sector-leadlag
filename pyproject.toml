@@ -15,5 +15,8 @@ ignore = [
     "E501",  # line too long (line-length で管理)
 ]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 [tool.ruff.lint.isort]
-known-first-party = ["strategy"]
+known-first-party = ["src"]

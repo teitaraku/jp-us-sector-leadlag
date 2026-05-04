@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from strategy import (
+from src.strategy import (
     JP_LABEL,
     JP_TICKERS,
     NJ,

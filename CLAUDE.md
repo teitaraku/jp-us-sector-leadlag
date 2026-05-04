@@ -25,7 +25,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # ダッシュボード起動（http://localhost:8501）
-python -m streamlit run dashboard.py
+python -m streamlit run main.py
 
 # テスト実行
 pytest tests/
@@ -41,9 +41,13 @@ ruff check .
 
 ## アーキテクチャ
 
-2 ファイル構成。計算ロジックと UI を分離している。
+3 ファイル構成。`main.py` がエントリポイント、`src/` 配下に計算ロジックと UI を分離している。
 
-### `strategy.py` — 計算ロジック（Streamlit に非依存）
+### `main.py` — エントリポイント
+
+`src.dashboard.main` を呼び出す 2 行だけのラッパー。`streamlit run main.py` で起動する。
+
+### `src/strategy.py` — 計算ロジック（Streamlit に非依存）
 
 定数（ティッカー・ラベル・分類）と以下の関数を含む。
 
@@ -66,9 +70,9 @@ ruff check .
 
 6. **`perf_metrics(rets)`** — AR（年率リターン）・RISK・R/R（リターン/リスク比）・MDD を計算する。
 
-### `dashboard.py` — Streamlit UI
+### `src/dashboard.py` — Streamlit UI
 
-`strategy.py` の関数をインポートして使用する。
+`src.strategy` の関数をインポートして使用する。
 
 - `_load_data(start, end)` — `load_data` に `@st.cache_data(ttl=3600)` を適用したラッパー
 - `main()` — サイドバーでパラメータ（開始/終了日・L・λ・K・q）を設定し、5 タブ（🎯 今日のシグナル・📈 バックテスト・📊 データ・🔬 モデル分析・📖 使い方）を表示する。`run_backtest` には `on_progress` コールバック経由でプログレスバーを渡す。「今日のシグナル」タブは `compute_today_signal` を使用。

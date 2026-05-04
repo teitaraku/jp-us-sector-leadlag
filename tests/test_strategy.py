@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from strategy import (
+from src.strategy import (
     JP_TICKERS,
     NJ,
     NU,
