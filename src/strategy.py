@@ -1,88 +1,38 @@
 """
-日米業種リードラグ投資戦略 — 計算ロジック
+日米業種リードラグ投資戦略 — 論文実装アセンブリ
 Nakagawa et al. (2026), JSAI SIG-FIN-036
+
+4 戦略を組み合わせて run_backtest / compute_today_signal を提供する。
+計算ロジックは strategy_core・strategy_*.py に分離されている。
 """
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Callable
-from pathlib import Path
 
-import numpy as np
 import pandas as pd
-import yfinance as yf
-from scipy import linalg
 
-warnings.filterwarnings("ignore")
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 定数
-# ─────────────────────────────────────────────────────────────────────────────
-US_TICKERS = ["XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLRE", "XLU", "XLV", "XLY"]
-JP_TICKERS = [
-    "1617.T",
-    "1618.T",
-    "1619.T",
-    "1620.T",
-    "1621.T",
-    "1622.T",
-    "1623.T",
-    "1624.T",
-    "1625.T",
-    "1626.T",
-    "1627.T",
-    "1628.T",
-    "1629.T",
-    "1630.T",
-    "1631.T",
-    "1632.T",
-    "1633.T",
-]
-
-US_LABEL = {
-    "XLB": "Materials",
-    "XLC": "Comm Svcs",
-    "XLE": "Energy",
-    "XLF": "Financials",
-    "XLI": "Industrials",
-    "XLK": "Info Tech",
-    "XLP": "Cons Staples",
-    "XLRE": "Real Estate",
-    "XLU": "Utilities",
-    "XLV": "Health Care",
-    "XLY": "Cons Discret",
-}
-JP_LABEL = {
-    "1617.T": "食品",
-    "1618.T": "エネルギー資源",
-    "1619.T": "建設・資材",
-    "1620.T": "素材・化学",
-    "1621.T": "医薬品",
-    "1622.T": "自動車・輸送機",
-    "1623.T": "鉄鋼・非鉄",
-    "1624.T": "機械",
-    "1625.T": "電機・精密",
-    "1626.T": "情報通信",
-    "1627.T": "電力・ガス",
-    "1628.T": "運輸・物流",
-    "1629.T": "商社・卸売",
-    "1630.T": "小売",
-    "1631.T": "銀行",
-    "1632.T": "金融(除く銀行)",
-    "1633.T": "不動産",
-}
-
-US_CYCLICAL = {"XLB", "XLE", "XLF", "XLRE"}
-US_DEFENSIVE = {"XLK", "XLP", "XLU", "XLV"}
-JP_CYCLICAL = {"1618.T", "1625.T", "1629.T", "1631.T"}
-JP_DEFENSIVE = {"1617.T", "1621.T", "1627.T", "1630.T"}
-
-NU = len(US_TICKERS)
-NJ = len(JP_TICKERS)
-N = NU + NJ
-
-DATA_DIR = Path(__file__).parent / "data"
+# コア基盤の再エクスポート（dashboard・テストが strategy から直接 import できるよう維持）
+from src.strategy_core import (  # noqa: F401
+    JP_LABEL,
+    JP_TICKERS,
+    NJ,
+    NU,
+    US_LABEL,
+    US_TICKERS,
+    N,
+    build_C0,
+    build_V0,
+    compute_live_signal,
+    load_data,
+    perf_metrics,
+    run_backtest_loop,
+)
+from src.strategy_double import compute_return as _double
+from src.strategy_mom import compute_return as _mom
+from src.strategy_pca_plain import compute_return as _pca_plain
+from src.strategy_pca_sub import compute_return as _pca_sub
+from src.strategy_pca_sub import compute_signal as _pca_sub_signal
 
 STRAT_COLORS = {"PCA_SUB": "blue", "DOUBLE": "green", "PCA_PLAIN": "orange", "MOM": "red"}
 STRAT_DISP = {
@@ -92,155 +42,14 @@ STRAT_DISP = {
     "MOM": "MOM",
 }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# データ取得
-# ─────────────────────────────────────────────────────────────────────────────
-def load_data(start: str, end: str) -> tuple[pd.DataFrame, ...]:
-    DATA_DIR.mkdir(exist_ok=True)
-
-    def extract(raw, tickers, price):
-        if isinstance(raw.columns, pd.MultiIndex):
-            df = raw[price]
-            for t in tickers:
-                if t not in df.columns:
-                    df[t] = np.nan
-            return df[tickers].copy()
-        df = pd.DataFrame({tickers[0]: raw[price]})
-        for t in tickers[1:]:
-            df[t] = np.nan
-        return df
-
-    def _save(uc, jc, jo):
-        uc.to_parquet(DATA_DIR / "us_close.parquet")
-        jc.to_parquet(DATA_DIR / "jp_close.parquet")
-        jo.to_parquet(DATA_DIR / "jp_open.parquet")
-
-    def _download_and_cache(s: str, e: str):
-        us_raw = yf.download(US_TICKERS, start=s, end=e, auto_adjust=True, progress=False)
-        jp_raw = yf.download(JP_TICKERS, start=s, end=e, auto_adjust=True, progress=False)
-        uc = extract(us_raw, US_TICKERS, "Close")
-        jc = extract(jp_raw, JP_TICKERS, "Close")
-        jo = extract(jp_raw, JP_TICKERS, "Open")
-        _save(uc, jc, jo)
-        return uc, jc, jo
-
-    def _incremental_update(uc, jc, jo, cache_max: pd.Timestamp, e: str):
-        new_start = (cache_max + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-        us_raw = yf.download(US_TICKERS, start=new_start, end=e, auto_adjust=True, progress=False)
-        jp_raw = yf.download(JP_TICKERS, start=new_start, end=e, auto_adjust=True, progress=False)
-        if us_raw.empty and jp_raw.empty:
-            return uc, jc, jo
-        uc_new = extract(us_raw, US_TICKERS, "Close")
-        jc_new = extract(jp_raw, JP_TICKERS, "Close")
-        jo_new = extract(jp_raw, JP_TICKERS, "Open")
-
-        def merge(old, new):
-            combined = pd.concat([old, new])
-            return combined[~combined.index.duplicated(keep="last")].sort_index()
-
-        uc, jc, jo = merge(uc, uc_new), merge(jc, jc_new), merge(jo, jo_new)
-        _save(uc, jc, jo)
-        return uc, jc, jo
-
-    cache = {
-        "us_close": DATA_DIR / "us_close.parquet",
-        "jp_close": DATA_DIR / "jp_close.parquet",
-        "jp_open": DATA_DIR / "jp_open.parquet",
-    }
-    start_ts, end_ts = pd.Timestamp(start), pd.Timestamp(end)
-
-    if all(p.exists() for p in cache.values()):
-        uc = pd.read_parquet(cache["us_close"])
-        jc = pd.read_parquet(cache["jp_close"])
-        jo = pd.read_parquet(cache["jp_open"])
-        cache_min = uc.index.min()
-        cache_max = uc.index.max()
-        if cache_min > start_ts:
-            # キャッシュがstart以前をカバーしていない → 全件再取得
-            uc, jc, jo = _download_and_cache(start, end)
-        elif cache_max < end_ts:
-            # キャッシュがendに届いていない → 差分のみ取得
-            uc, jc, jo = _incremental_update(uc, jc, jo, cache_max, end)
-        uc = uc.loc[start_ts:end_ts]
-        jc = jc.loc[start_ts:end_ts]
-        jo = jo.loc[start_ts:end_ts]
-    else:
-        uc, jc, jo = _download_and_cache(start, end)
-
-    us_cc = uc.pct_change()
-    jp_cc = jc.pct_change()
-    jp_oc = (jc - jo) / jo.replace(0, np.nan)
-
-    return (
-        us_cc.dropna(how="all"),
-        jp_cc.dropna(how="all"),
-        jp_oc.dropna(how="all"),
-        uc,
-        jc,
-    )
+_PAPER_STRATEGIES: dict[str, Callable] = {
+    "MOM": _mom,
+    "PCA_PLAIN": _pca_plain,
+    "PCA_SUB": _pca_sub,
+    "DOUBLE": _double,
+}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 事前部分空間 V₀ と C₀
-# ─────────────────────────────────────────────────────────────────────────────
-def build_V0() -> np.ndarray:
-    v1 = np.ones(N) / np.sqrt(N)
-
-    v2 = np.zeros(N)
-    v2[:NU] = 1.0 / np.sqrt(NU)
-    v2[NU:] = -1.0 / np.sqrt(NJ)
-    v2 -= np.dot(v2, v1) * v1
-    v2 /= np.linalg.norm(v2)
-
-    v3 = np.zeros(N)
-    for i, t in enumerate(US_TICKERS):
-        if t in US_CYCLICAL:
-            v3[i] = 1.0
-        elif t in US_DEFENSIVE:
-            v3[i] = -1.0
-    for i, t in enumerate(JP_TICKERS):
-        if t in JP_CYCLICAL:
-            v3[NU + i] = 1.0
-        elif t in JP_DEFENSIVE:
-            v3[NU + i] = -1.0
-    v3 -= np.dot(v3, v1) * v1
-    v3 -= np.dot(v3, v2) * v2
-    norm3 = np.linalg.norm(v3)
-    if norm3 > 1e-12:
-        v3 /= norm3
-
-    return np.column_stack([v1, v2, v3])
-
-
-def build_C0(V0: np.ndarray, Cfull: np.ndarray) -> np.ndarray:
-    D0 = np.diag(V0.T @ Cfull @ V0)
-    C0_raw = V0 @ np.diag(D0) @ V0.T
-    diag_sq = np.sqrt(np.maximum(np.diag(C0_raw), 1e-12))
-    C0 = C0_raw / np.outer(diag_sq, diag_sq)
-    np.fill_diagonal(C0, 1.0)
-    return C0
-
-
-def _prepare_prior(
-    us_cc: pd.DataFrame,
-    jp_cc: pd.DataFrame,
-    cfull_end: str,
-) -> tuple[np.ndarray, np.ndarray, pd.DataFrame]:
-    """V0・C0・結合リターン DataFrame を構築して返す。"""
-    V0 = build_V0()
-    all_cc = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna(thresh=N // 2)
-    cfull_mask = all_cc.index <= cfull_end
-    cfull_data = all_cc[cfull_mask] if cfull_mask.sum() > 100 else all_cc.iloc[:500]
-    Cfull = np.nan_to_num(cfull_data.corr().values)
-    np.fill_diagonal(Cfull, 1.0)
-    C0 = build_C0(V0, Cfull)
-    return V0, C0, all_cc
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# バックテスト
-# ─────────────────────────────────────────────────────────────────────────────
 def run_backtest(
     us_cc: pd.DataFrame,
     jp_cc: pd.DataFrame,
@@ -252,115 +61,20 @@ def run_backtest(
     cfull_end: str = "2014-12-31",
     on_progress: Callable[[int, int], None] | None = None,
 ) -> pd.DataFrame:
-    """4戦略のロングショートリターン系列を返す。
-    on_progress(step, total) は任意のプログレス通知コールバック。
-    """
-
-    V0, C0, all_cc = _prepare_prior(us_cc, jp_cc, cfull_end)
-
-    jp_dates_arr = jp_oc.index.values
-    paired: list[tuple] = []
-    for us_date in all_cc.index:
-        future = jp_dates_arr[jp_dates_arr > us_date]
-        if len(future) == 0:
-            continue
-        next_jp = future[0]
-        if next_jp in jp_oc.index:
-            paired.append((us_date, next_jp))
-
-    all_cc_arr = all_cc.values.astype(float)
-    idx_map = {d: i for i, d in enumerate(all_cc.index)}
-
-    results = {s: [] for s in ["MOM", "PCA_PLAIN", "PCA_SUB", "DOUBLE"]}
-    dates_out: list = []
-    n_pairs = len(paired)
-
-    for step, (us_date, jp_date) in enumerate(paired):
-        if on_progress and step % max(n_pairs // 80, 1) == 0:
-            on_progress(step, n_pairs)
-
-        t_idx = idx_map.get(us_date)
-        if t_idx is None or t_idx < L:
-            continue
-
-        window = all_cc_arr[t_idx - L : t_idx]
-        if np.isnan(window).mean() > 0.3:
-            continue
-
-        mu = np.nanmean(window, axis=0)
-        sigma = np.nanstd(window, axis=0)
-        sigma = np.where(sigma < 1e-10, 1e-10, sigma)
-        z_win = np.nan_to_num((window - mu) / sigma)
-
-        Ct = np.corrcoef(z_win.T)
-        Ct = np.nan_to_num(Ct)
-        np.fill_diagonal(Ct, 1.0)
-
-        us_today = all_cc_arr[t_idx, :NU]
-        z_us = np.nan_to_num((us_today - mu[:NU]) / sigma[:NU])
-
-        target_row = jp_oc.loc[jp_date, JP_TICKERS]
-        target = target_row.values.astype(float)
-        if np.isnan(target).mean() > 0.5:
-            continue
-
-        mom_signal = mu[NU:]
-
-        try:
-            eigvals, eigvecs = linalg.eigh(Ct)
-            order = np.argsort(eigvals)[::-1]
-            Vk = eigvecs[:, order[:K]]
-            z_jp_plain = Vk[NU:] @ (Vk[:NU].T @ z_us)
-        except Exception:
-            z_jp_plain = np.zeros(NJ)
-
-        try:
-            C_reg = (1.0 - lam) * Ct + lam * C0
-            eigvals_r, eigvecs_r = linalg.eigh(C_reg)
-            order_r = np.argsort(eigvals_r)[::-1]
-            Vk_r = eigvecs_r[:, order_r[:K]]
-            z_jp_sub = Vk_r[NU:] @ (Vk_r[:NU].T @ z_us)
-        except Exception:
-            z_jp_sub = np.zeros(NJ)
-
-        def ls_ret(signal: np.ndarray, ret: np.ndarray) -> float:
-            mask = ~np.isnan(ret)
-            s, r = signal[mask], ret[mask]
-            n = len(s)
-            if n < 3:
-                return np.nan
-            n_each = max(1, int(n * q))
-            rank = np.argsort(s)
-            return float(r[rank[-n_each:]].mean() - r[rank[:n_each]].mean())
-
-        r_mom = ls_ret(mom_signal, target)
-        r_plain = ls_ret(z_jp_plain, target)
-        r_sub = ls_ret(z_jp_sub, target)
-
-        mask = ~np.isnan(target)
-        if mask.sum() >= 4:
-            s1, s2, r = mom_signal[mask], z_jp_sub[mask], target[mask]
-            hi1 = s1 >= np.median(s1)
-            hi2 = s2 >= np.median(s2)
-            lg, sh = hi1 & hi2, ~hi1 & ~hi2
-            r_double = (
-                float(r[lg].mean() - r[sh].mean()) if lg.sum() > 0 and sh.sum() > 0 else np.nan
-            )
-        else:
-            r_double = np.nan
-
-        results["MOM"].append(r_mom)
-        results["PCA_PLAIN"].append(r_plain)
-        results["PCA_SUB"].append(r_sub)
-        results["DOUBLE"].append(r_double)
-        dates_out.append(us_date)
-
-    return pd.DataFrame(results, index=dates_out).dropna(how="all")
+    return run_backtest_loop(
+        us_cc,
+        jp_cc,
+        jp_oc,
+        L,
+        lam,
+        K,
+        q,
+        cfull_end,
+        strategies=_PAPER_STRATEGIES,
+        on_progress=on_progress,
+    )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 今日のシグナル
-# ─────────────────────────────────────────────────────────────────────────────
 def compute_today_signal(
     us_cc: pd.DataFrame,
     jp_cc: pd.DataFrame,
@@ -371,73 +85,14 @@ def compute_today_signal(
     q: float = 0.30,
     cfull_end: str = "2014-12-31",
 ) -> dict:
-    """最新の米国リターンから日本業種 ETF の売買シグナルを計算する。"""
-    V0, C0, all_cc = _prepare_prior(us_cc, jp_cc, cfull_end)
-
-    us_valid = us_cc[US_TICKERS].dropna(how="all")
-    if len(us_valid) == 0:
-        raise ValueError("米国リターンデータがありません")
-
-    latest_us_date = us_valid.index[-1]
-    us_today_row = us_valid.loc[latest_us_date]
-
-    all_cc_window = all_cc[all_cc.index <= latest_us_date]
-    if len(all_cc_window) < L:
-        raise ValueError(f"ウィンドウ計算に必要なデータが不足しています（必要: {L}日）")
-
-    window = all_cc_window.iloc[-L:].values.astype(float)
-    mu = np.nanmean(window, axis=0)
-    sigma = np.nanstd(window, axis=0)
-    sigma = np.where(sigma < 1e-10, 1e-10, sigma)
-    z_win = np.nan_to_num((window - mu) / sigma)
-
-    Ct = np.corrcoef(z_win.T)
-    Ct = np.nan_to_num(Ct)
-    np.fill_diagonal(Ct, 1.0)
-
-    z_us = np.nan_to_num((us_today_row.values.astype(float) - mu[:NU]) / sigma[:NU])
-
-    C_reg = (1.0 - lam) * Ct + lam * C0
-    eigvals_r, eigvecs_r = linalg.eigh(C_reg)
-    order_r = np.argsort(eigvals_r)[::-1]
-    Vk_r = eigvecs_r[:, order_r[:K]]
-    z_jp_sub = Vk_r[NU:] @ (Vk_r[:NU].T @ z_us)
-
-    signal = pd.Series(z_jp_sub, index=JP_TICKERS)
-    n_each = max(1, int(NJ * q))
-
-    jp_dates = jp_oc.index
-    future_jp = jp_dates[jp_dates > latest_us_date]
-    next_jp_date = future_jp[0] if len(future_jp) > 0 else None
-
-    return {
-        "signal": signal,
-        "us_date": latest_us_date,
-        "next_jp_date": next_jp_date,
-        "us_returns": us_today_row,
-        "n_long": n_each,
-        "n_short": n_each,
-    }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# パフォーマンス指標
-# ─────────────────────────────────────────────────────────────────────────────
-def perf_metrics(rets: pd.DataFrame) -> pd.DataFrame:
-    rows = {}
-    for col in rets.columns:
-        r = rets[col].dropna()
-        if len(r) == 0:
-            continue
-        ar = r.mean() * 252 * 100
-        risk = r.std() * np.sqrt(252) * 100
-        rr = ar / risk if risk > 0 else 0.0
-        cum = (1 + r).cumprod()
-        mdd = ((cum - cum.cummax()) / cum.cummax()).min() * 100
-        rows[col] = {
-            "AR(%)": round(ar, 2),
-            "RISK(%)": round(risk, 2),
-            "R/R": round(rr, 2),
-            "MDD(%)": round(abs(mdd), 2),
-        }
-    return pd.DataFrame(rows).T
+    return compute_live_signal(
+        us_cc,
+        jp_cc,
+        jp_oc,
+        L,
+        lam,
+        K,
+        q,
+        cfull_end,
+        signal_fn=_pca_sub_signal,
+    )

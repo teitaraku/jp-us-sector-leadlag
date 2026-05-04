@@ -62,7 +62,7 @@ ruff check .
    - `C_reg = (1−λ)·Ct + λ·C₀` を形成
    - 上位 K 固有ベクトル `Vk` を固有分解で取得
    - リードラグシグナル `z_JP = Vk[JP] @ (Vk[US].T @ z_US_today)` を計算
-   - MOM・PCA_PLAIN・PCA_SUB・DOUBLE の 4 戦略のロングショートリターンを算出
+   - **PCA_SUB**（提案手法）・MOM・PCA_PLAIN・DOUBLE の 4 戦略のロングショートリターンを算出（MOM・PCA_PLAIN・DOUBLE は比較用ベースライン）
    - 日次リターンの DataFrame を返す
    - `on_progress(step, total)` はオプションのプログレス通知コールバック
 

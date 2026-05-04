@@ -15,8 +15,6 @@ from src.strategy import (
     JP_TICKERS,
     NJ,
     NU,
-    STRAT_COLORS,
-    STRAT_DISP,
     US_LABEL,
     US_TICKERS,
     build_C0,
@@ -26,6 +24,9 @@ from src.strategy import (
     perf_metrics,
     run_backtest,
 )
+from src.strategy_core import compute_live_signal, run_backtest_loop
+from src.strategy_exp import compute_return as _exp_return
+from src.strategy_exp import compute_signal as _exp_signal
 
 st.set_page_config(
     page_title="日米業種リードラグ投資戦略",
@@ -113,6 +114,16 @@ def main() -> None:
             _load_data.clear()
             st.rerun()
 
+        strategy_mode = st.radio(
+            "戦略モード",
+            ["📄 論文戦略", "🧪 新戦略（実験中）"],
+            key="strategy_mode",
+            help="「論文戦略」は Nakagawa et al. (2026) の実装そのまま。"
+            "「新戦略（実験中）」は自由に改変可能な独立コピー。",
+            horizontal=True,
+        )
+        use_exp = strategy_mode == "🧪 新戦略（実験中）"
+
         st.markdown("---")
         today = pd.Timestamp.today()
         start = st.date_input(
@@ -174,8 +185,10 @@ def main() -> None:
         )
 
         st.markdown("---")
-        st.markdown("**論文パラメータ**: L=60, λ=0.9, K=3, q=0.3")
-        st.button("論文パラメータにリセット", on_click=_reset_params, use_container_width=True)
+        st.markdown("**PCA SUB(論文) 推奨パラメータ**: L=60, λ=0.9, K=3, q=0.3")
+        st.button(
+            "PCA SUB(論文) パラメータにリセット", on_click=_reset_params, use_container_width=True
+        )
 
         st.markdown("---")
         st.markdown(
@@ -394,7 +407,7 @@ def main() -> None:
         st.dataframe(
             pd.DataFrame(
                 {
-                    "戦略": ["MOM", "PCA PLAIN", "PCA SUB（提案）", "DOUBLE"],
+                    "戦略": ["MOM", "PCA PLAIN", "PCA SUB(論文)", "DOUBLE"],
                     "説明": [
                         "日本業種のウィンドウ内平均リターン（単純モメンタム）",
                         "正則化なし PCA (λ=0) によるリードラグシグナル",
@@ -622,17 +635,26 @@ def main() -> None:
     # ═══════════════════════════════════════════════════
     with tab_bt:
         st.caption(
-            "指定した期間・パラメータで 4 戦略のパフォーマンスを検証します。「バックテスト実行」を押すと計算が始まります。"
+            "論文戦略と新戦略（実験中）を同時に計算・比較します。「バックテスト実行」を押すと計算が始まります。"
         )
+
         if st.button("🚀 バックテスト実行", type="primary"):
             with st.spinner("計算中…"):
                 try:
-                    prog = st.progress(0.0, text="バックテスト実行中…")
+                    prog = st.progress(0.0, text="論文戦略を計算中…")
 
-                    def on_progress(step: int, total: int) -> None:
-                        prog.progress(step / total, text=f"バックテスト実行中… {step}/{total}")
+                    def on_progress_p(step: int, total: int) -> None:
+                        prog.progress(step / total * 0.5, text=f"論文戦略を計算中… {step}/{total}")
 
-                    rets = run_backtest(
+                    def on_progress_e(step: int, total: int) -> None:
+                        prog.progress(
+                            0.5 + step / total * 0.5, text=f"新戦略を計算中… {step}/{total}"
+                        )
+
+                    rets_p = run_backtest(
+                        us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q, on_progress=on_progress_p
+                    )
+                    rets_e = run_backtest_loop(
                         us_cc,
                         jp_cc,
                         jp_oc,
@@ -640,53 +662,73 @@ def main() -> None:
                         lam=lam,
                         K=K,
                         q=q,
-                        on_progress=on_progress,
+                        cfull_end="2014-12-31",
+                        strategies={"PCA_SUB": _exp_return},
+                        on_progress=on_progress_e,
                     )
                     prog.empty()
-                    st.session_state["rets"] = rets
-                    st.success(f"完了！ {len(rets)} 日分のリターンを計算しました。")
+                    st.session_state["rets_paper"] = rets_p
+                    st.session_state["rets_exp"] = rets_e
+                    st.success(f"完了！ {len(rets_p)} 日分のリターンを計算しました。")
                 except Exception as exc:
                     st.error(f"エラー: {exc}")
                     import traceback
 
                     st.code(traceback.format_exc())
 
-        if "rets" not in st.session_state:
+        if "rets_paper" not in st.session_state:
             st.info("「バックテスト実行」ボタンを押してください。")
         else:
-            rets: pd.DataFrame = st.session_state["rets"]
+            rets_p: pd.DataFrame = st.session_state["rets_paper"]
+            rets_e: pd.DataFrame = st.session_state["rets_exp"]
+
+            # 論文戦略: 表示名をアンダースコアなしに整形、PCA_SUB のみ "(論文)" 付き
+            _RENAME_P = {
+                "MOM": "MOM",
+                "PCA_PLAIN": "PCA PLAIN",
+                "PCA_SUB": "PCA SUB(論文)",
+                "DOUBLE": "DOUBLE",
+            }
+            # 実験戦略: PCA_SUB のみ取り出して "(改)" 付き
+            rets_all = rets_p.rename(columns=_RENAME_P).join(
+                rets_e[["PCA_SUB"]].rename(columns={"PCA_SUB": "PCA SUB(改)"}), how="outer"
+            )
+
+            # (表示名, 色, 線種)
+            _COMBINED_CFG = [
+                ("PCA SUB(論文)", "blue", "solid"),
+                ("PCA SUB(改)", "cornflowerblue", "dash"),
+                ("DOUBLE", "green", "solid"),
+                ("PCA PLAIN", "orange", "solid"),
+                ("MOM", "red", "solid"),
+            ]
 
             # ── パフォーマンス指標 ──
             st.subheader("パフォーマンス指標")
             st.caption(
-                "4 戦略の年率リターン（AR）・ボラティリティ（RISK）・リターン/リスク比（R/R）・最大ドローダウン（MDD）を比較します。"
+                "MOM・PCA PLAIN・DOUBLE は比較用ベースライン（改版なし）。PCA SUB（提案手法）は論文版と改版を並べて比較します。"
             )
-            metrics = perf_metrics(rets)
-
-            _STRAT_HELP = {
-                "MOM": "モメンタム。米国業種リターンをそのまま日本業種シグナルに使うシンプルなベースライン。",
-                "PCA_PLAIN": "正則化なし PCA。日米結合相関行列を固有分解してリードラグシグナルを抽出。",
-                "PCA_SUB": "部分空間正則化 PCA（論文提案手法）。事前部分空間 V₀ を正則化のアンカーに用いた改良版。",
-                "DOUBLE": "ダブルソート。MOM と PCA SUB の両シグナルで 2 段階スクリーニングを行う複合戦略。",
-            }
+            metrics = perf_metrics(rets_all)
             _METRIC_HELP = {
-                "AR(%)": "Annualized Return（年率リターン）。日次リターンを年率換算した平均リターン。大きいほど高収益。",
-                "RISK(%)": "年率ボラティリティ。日次リターンの標準偏差を √252 倍した値。リターンのぶれの大きさ。小さいほど安定。",
-                "R/R": "Return/Risk 比（シャープレシオ相当）。AR ÷ RISK で計算。大きいほどリスクあたりの収益が効率的。",
-                "MDD(%)": "Maximum Drawdown（最大ドローダウン）。累積リターンが過去ピークから最大でどれだけ下落したか。小さいほど安定。",
+                "AR(%)": "年率リターン。大きいほど高収益。",
+                "RISK(%)": "年率ボラティリティ。小さいほど安定。",
+                "R/R": "リターン/リスク比（シャープレシオ相当）。大きいほど効率的。",
+                "MDD(%)": "最大ドローダウン。小さいほど安定。",
             }
-
-            for strat_key in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
-                if strat_key not in metrics.index:
+            _STRAT_HELP = {
+                "PCA SUB(論文)": "部分空間正則化 PCA（論文実装）。事前部分空間 V₀ を正則化のアンカーに用いた提案手法。",
+                "PCA SUB(改)": "部分空間正則化 PCA（実験中）。論文実装を起点に自由に改変可能な独立コピー。",
+                "DOUBLE": "ダブルソート。MOM と PCA SUB の両シグナルで 2 段階スクリーニングを行う複合戦略。",
+                "PCA PLAIN": "正則化なし PCA。日米結合相関行列を固有分解してリードラグシグナルを抽出。",
+                "MOM": "モメンタム。米国業種リターンをそのまま日本業種シグナルに使うシンプルなベースライン。",
+            }
+            for key in ["PCA SUB(論文)", "PCA SUB(改)", "DOUBLE", "PCA PLAIN", "MOM"]:
+                if key not in metrics.index:
                     continue
-                row = metrics.loc[strat_key]
+                row = metrics.loc[key]
                 with st.container(border=True):
-                    name_col, ar_col, risk_col, rr_col, mdd_col = st.columns([2, 1, 1, 1, 1])
-                    name_col.metric(
-                        label=STRAT_DISP[strat_key],
-                        value="",
-                        help=_STRAT_HELP[strat_key],
-                    )
+                    label_col, ar_col, risk_col, rr_col, mdd_col = st.columns([2, 1, 1, 1, 1])
+                    label_col.metric(label=key, value="", help=_STRAT_HELP.get(key, ""))
                     ar_col.metric("AR (%)", f"{row['AR(%)']:.2f}", help=_METRIC_HELP["AR(%)"])
                     risk_col.metric(
                         "RISK (%)", f"{row['RISK(%)']:.2f}", help=_METRIC_HELP["RISK(%)"]
@@ -696,20 +738,18 @@ def main() -> None:
 
             # ── 累積リターン ──
             st.subheader("累積リターン推移")
-            st.caption(
-                "バックテスト期間全体の累積リターン推移です。各戦略の長期的な収益性と成長ペースを比較できます。"
-            )
-            cum = (1 + rets).cumprod()
+            st.caption("実線が論文戦略、破線が新戦略（改）です。同色で比較できます。")
+            cum = (1 + rets_all).cumprod()
             fig_cum = go.Figure()
-            for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
-                if col in cum.columns:
+            for name, color, dash in _COMBINED_CFG:
+                if name in cum.columns:
                     fig_cum.add_trace(
                         go.Scatter(
                             x=cum.index,
-                            y=cum[col],
-                            name=STRAT_DISP[col],
+                            y=cum[name],
+                            name=name,
                             mode="lines",
-                            line=dict(color=STRAT_COLORS[col], width=2),
+                            line=dict(color=color, width=2, dash=dash),
                         )
                     )
             fig_cum.update_layout(
@@ -724,21 +764,21 @@ def main() -> None:
             # ── ドローダウン ──
             st.subheader("ドローダウン")
             st.caption(
-                "累積リターンが過去ピーク比でどれだけ下落したかを示します。谷が深いほど大きな損失局面があったことを意味します。"
+                "累積リターンが過去ピーク比でどれだけ下落したかを示します。実線が論文戦略、破線が新戦略（改）です。"
             )
             fig_dd = go.Figure()
-            for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
-                if col in rets.columns:
-                    r = rets[col].dropna()
+            for name, color, dash in _COMBINED_CFG:
+                if name in rets_all.columns:
+                    r = rets_all[name].dropna()
                     cum_r = (1 + r).cumprod()
                     dd = (cum_r - cum_r.cummax()) / cum_r.cummax() * 100
                     fig_dd.add_trace(
                         go.Scatter(
                             x=dd.index,
                             y=dd,
-                            name=STRAT_DISP[col],
+                            name=name,
                             mode="lines",
-                            line=dict(color=STRAT_COLORS[col]),
+                            line=dict(color=color, dash=dash),
                         )
                     )
             fig_dd.update_layout(
@@ -749,67 +789,71 @@ def main() -> None:
             )
             st.plotly_chart(fig_dd, width="stretch")
 
-            # ── 月次リターン・ヒートマップ（PCA SUB） ──
-            if "PCA_SUB" in rets.columns:
-                st.subheader("PCA SUB（提案）月次リターン (%)")
-                st.caption(
-                    "論文提案手法（PCA SUB）の月次リターンを年×月のヒートマップで表示します。緑が利益月、赤が損失月です。季節性や特定年のパフォーマンスを直感的に把握できます。"
-                )
-                monthly = rets["PCA_SUB"].dropna().resample("ME").sum() * 100
-                df_m = pd.DataFrame(
-                    {
-                        "ret": monthly,
-                        "Y": monthly.index.year,
-                        "M": monthly.index.month,
-                    }
-                )
-                pivot = df_m.pivot(index="Y", columns="M", values="ret")
-                pivot.columns = [
-                    "Jan",
-                    "Feb",
-                    "Mar",
-                    "Apr",
-                    "May",
-                    "Jun",
-                    "Jul",
-                    "Aug",
-                    "Sep",
-                    "Oct",
-                    "Nov",
-                    "Dec",
-                ]
-                fig_m = go.Figure(
-                    go.Heatmap(
-                        z=pivot.values,
-                        x=pivot.columns.tolist(),
-                        y=pivot.index.tolist(),
-                        colorscale="RdYlGn",
-                        zmid=0,
-                        text=pivot.values.round(1),
-                        texttemplate="%{text}",
-                        colorbar=dict(title="%"),
-                    )
-                )
-                fig_m.update_layout(height=430, xaxis_title="月", yaxis_title="年")
-                st.plotly_chart(fig_m, width="stretch")
+            # ── 月次リターン・ヒートマップ（PCA SUB 論文 vs 改） ──
+            _MONTH_COLS = [
+                "Jan",
+                "Feb",
+                "Mar",
+                "Apr",
+                "May",
+                "Jun",
+                "Jul",
+                "Aug",
+                "Sep",
+                "Oct",
+                "Nov",
+                "Dec",
+            ]
+
+            def _monthly_pivot(series: pd.Series) -> pd.DataFrame:
+                m = series.dropna().resample("ME").sum() * 100
+                df_m = pd.DataFrame({"ret": m, "Y": m.index.year, "M": m.index.month})
+                piv = df_m.pivot(index="Y", columns="M", values="ret")
+                piv.columns = _MONTH_COLS[: len(piv.columns)]
+                return piv
+
+            cols_hm = [c for c in ["PCA SUB(論文)", "PCA SUB(改)"] if c in rets_all.columns]
+            if cols_hm:
+                st.subheader("PCA SUB 月次リターン (%)")
+                st.caption("左が論文戦略、右が新戦略（改）。緑が利益月、赤が損失月です。")
+                hm_cols = st.columns(len(cols_hm))
+                for col_st, col_name in zip(hm_cols, cols_hm, strict=False):
+                    with col_st:
+                        piv = _monthly_pivot(rets_all[col_name])
+                        fig_m = go.Figure(
+                            go.Heatmap(
+                                z=piv.values,
+                                x=piv.columns.tolist(),
+                                y=piv.index.tolist(),
+                                colorscale="RdYlGn",
+                                zmid=0,
+                                text=piv.values.round(1),
+                                texttemplate="%{text}",
+                                colorbar=dict(title="%"),
+                            )
+                        )
+                        fig_m.update_layout(
+                            height=430, title=col_name, xaxis_title="月", yaxis_title="年"
+                        )
+                        st.plotly_chart(fig_m, width="stretch")
 
             # ── ローリング・シャープレシオ ──
             st.subheader("ローリング・シャープレシオ（252 営業日）")
             st.caption(
-                "直近 252 営業日（約 1 年）のローリング窓でシャープレシオを計算します。戦略の「稼ぐ力」が時代によってどう変化しているかを確認できます。0 を下回る期間はリスクに対してリターンが出ていない局面です。"
+                "実線が論文戦略、破線が新戦略（改）です。0 を下回る期間はリスクに対してリターンが出ていない局面です。"
             )
             fig_sh = go.Figure()
-            for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
-                if col in rets.columns:
-                    r = rets[col].dropna()
+            for name, color, dash in _COMBINED_CFG:
+                if name in rets_all.columns:
+                    r = rets_all[name].dropna()
                     rs = r.rolling(252).mean() / r.rolling(252).std() * np.sqrt(252)
                     fig_sh.add_trace(
                         go.Scatter(
                             x=rs.index,
                             y=rs,
-                            name=STRAT_DISP[col],
+                            name=name,
                             mode="lines",
-                            line=dict(color=STRAT_COLORS[col]),
+                            line=dict(color=color, dash=dash),
                         )
                     )
             fig_sh.add_hline(y=0, line_dash="dash", line_color="gray")
@@ -824,20 +868,20 @@ def main() -> None:
             # ── 年次リターン比較 ──
             st.subheader("年次リターン比較 (%)")
             st.caption(
-                "各年の戦略別リターンを棒グラフで並べて比較します。特定の年に強い・弱い戦略の違いや、市場環境との関係を把握するのに役立ちます。"
+                "各年の戦略別リターンを棒グラフで比較します。実線系が論文戦略、破線系（同色）が新戦略（改）です。"
             )
-            annual = rets.resample("YE").sum() * 100
+            annual = rets_all.resample("YE").sum() * 100
             annual.index = annual.index.year
             fig_ann = go.Figure()
-            for col in ["PCA_SUB", "DOUBLE", "PCA_PLAIN", "MOM"]:
-                if col in annual.columns:
+            for name, color, _ in _COMBINED_CFG:
+                if name in annual.columns:
                     fig_ann.add_trace(
                         go.Bar(
                             x=annual.index,
-                            y=annual[col],
-                            name=STRAT_DISP[col],
-                            marker_color=STRAT_COLORS[col],
-                            opacity=0.8,
+                            y=annual[name],
+                            name=name,
+                            marker_color=color,
+                            opacity=0.85,
                         )
                     )
             fig_ann.update_layout(
@@ -852,14 +896,29 @@ def main() -> None:
     # 今日のシグナル
     # ═══════════════════════════════════════════════════
     with tab_today:
-        st.subheader("🎯 今日の売買シグナル（PCA SUB）")
+        today_mode_label = "🧪 新戦略（実験中）" if use_exp else "📄 論文戦略"
+        st.subheader(f"🎯 今日の売買シグナル（PCA SUB） — {today_mode_label}")
         st.caption(
             "サイドバーの終了日に含まれる最新米国取引日のリターンを使用してシグナルを計算します。"
             "米国市場クローズ（東京時間 5:00〔夏〕/ 6:00〔冬〕）後、東証オープン（9:00）までに確認してください。"
         )
 
         try:
-            sig_result = compute_today_signal(us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q)
+            sig_result = (
+                compute_live_signal(
+                    us_cc,
+                    jp_cc,
+                    jp_oc,
+                    L=L,
+                    lam=lam,
+                    K=K,
+                    q=q,
+                    cfull_end="2014-12-31",
+                    signal_fn=_exp_signal,
+                )
+                if use_exp
+                else compute_today_signal(us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q)
+            )
         except Exception as exc:
             st.error(f"シグナル計算に失敗しました: {exc}")
         else:
