@@ -39,6 +39,13 @@ def _load_data(start: str, end: str):
     return load_data(start, end)
 
 
+def _reset_params():
+    st.session_state["L"] = 60
+    st.session_state["lam"] = 0.9
+    st.session_state["K"] = 3
+    st.session_state["q"] = 0.30
+
+
 def _color_best(s: pd.Series):
     if s.name in ("AR(%)", "R/R"):
         best = s.max()
@@ -46,7 +53,7 @@ def _color_best(s: pd.Series):
         best = s.min()
     else:
         return [""] * len(s)
-    return ["background-color:#c8f7c5" if v == best else "" for v in s]
+    return ["background-color:#c8f7c5; color:#000000" if v == best else "" for v in s]
 
 
 def _highlight_action(row):
@@ -104,8 +111,19 @@ def main() -> None:
             st.rerun()
 
         st.markdown("---")
-        start = st.date_input("開始日", value=pd.Timestamp("2010-01-01")).strftime("%Y-%m-%d")
-        end = st.date_input("終了日", value=pd.Timestamp.today()).strftime("%Y-%m-%d")
+        today = pd.Timestamp.today()
+        start = st.date_input(
+            "開始日",
+            value=pd.Timestamp("2010-01-01"),
+            min_value=pd.Timestamp("2000-01-01"),
+            max_value=today,
+        ).strftime("%Y-%m-%d")
+        end = st.date_input(
+            "終了日",
+            value=today,
+            min_value=pd.Timestamp("2000-01-01"),
+            max_value=today,
+        ).strftime("%Y-%m-%d")
         L = st.slider("推定ウィンドウ L（営業日）", 20, 252, 60, 5, key="L")
         lam = st.slider("正則化パラメータ λ", 0.0, 1.0, 0.9, 0.05, key="lam")
         K = st.slider("主成分数 K", 1, 5, 3, key="K")
@@ -113,12 +131,7 @@ def main() -> None:
 
         st.markdown("---")
         st.markdown("**論文パラメータ**: L=60, λ=0.9, K=3, q=0.3")
-        if st.button("論文パラメータにリセット", use_container_width=True):
-            st.session_state["L"] = 60
-            st.session_state["lam"] = 0.9
-            st.session_state["K"] = 3
-            st.session_state["q"] = 0.30
-            st.rerun()
+        st.button("論文パラメータにリセット", on_click=_reset_params, use_container_width=True)
 
         st.markdown("---")
         st.markdown(
