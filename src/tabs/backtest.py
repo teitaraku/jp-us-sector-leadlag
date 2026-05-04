@@ -152,7 +152,9 @@ def render(
 
     # ── 累積リターン ──
     st.subheader("累積リターン推移")
-    st.caption("実線が論文戦略、破線が新戦略（改）です。同色で比較できます。")
+    st.caption(
+        "初期値 1 を基準とした資産成長曲線です。値が大きいほど累積収益が高いことを示します。"
+    )
     cum = (1 + rets_all).cumprod()
     fig_cum = go.Figure()
     for name, color, dash in _COMBINED_CFG:
@@ -194,9 +196,7 @@ def render(
 
     # ── ドローダウン ──
     st.subheader("ドローダウン")
-    st.caption(
-        "累積リターンが過去ピーク比でどれだけ下落したかを示します。実線が論文戦略、破線が新戦略（改）です。"
-    )
+    st.caption("累積リターンが過去ピーク比でどれだけ下落したかを示します。")
     fig_dd = go.Figure()
     for name, color, dash in _COMBINED_CFG:
         if name in rets_all.columns:
@@ -224,7 +224,7 @@ def render(
     cols_hm = [c for c in ["PCA SUB(論文)", "PCA SUB(改)"] if c in rets_all.columns]
     if cols_hm:
         st.subheader("PCA SUB 月次リターン (%)")
-        st.caption("左が論文戦略、右が新戦略（改）。緑が利益月、赤が損失月です。")
+        st.caption("緑が利益月、赤が損失月です。")
         hm_cols = st.columns(len(cols_hm))
         for col_st, col_name in zip(hm_cols, cols_hm, strict=False):
             with col_st:
@@ -246,9 +246,7 @@ def render(
 
     # ── ローリング・シャープレシオ ──
     st.subheader("ローリング・シャープレシオ（252 営業日）")
-    st.caption(
-        "実線が論文戦略、破線が新戦略（改）です。0 を下回る期間はリスクに対してリターンが出ていない局面です。"
-    )
+    st.caption("0 を下回る期間はリスクに対してリターンが出ていない局面です。")
     fig_sh = go.Figure()
     for name, color, dash in _COMBINED_CFG:
         if name in rets_all.columns:
@@ -274,9 +272,7 @@ def render(
 
     # ── 年次リターン比較 ──
     st.subheader("年次リターン比較 (%)")
-    st.caption(
-        "各年の戦略別リターンを棒グラフで比較します。実線系が論文戦略、破線系（同色）が新戦略（改）です。"
-    )
+    st.caption("各年の戦略別リターンを棒グラフで比較します。")
     annual = rets_all.resample("YE").sum() * 100
     annual.index = annual.index.year
     fig_ann = go.Figure()

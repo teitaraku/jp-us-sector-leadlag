@@ -17,17 +17,18 @@ def render(
     K: int,
     q: float,
 ) -> None:
-    strategy_mode = st.selectbox(
-        "戦略モード",
-        ["📄 論文戦略", "🧪 新戦略（実験中）"],
+    st.subheader("🎯 今日の売買シグナル（PCA SUB）")
+    strategy_mode = st.radio(
+        "使用する戦略を選択",
+        ["📄 PCA SUB（論文）", "🧪 PCA SUB 改良版"],
+        horizontal=True,
         key="strategy_mode",
-        help="「論文戦略」は Nakagawa et al. (2026) の実装そのまま。"
-        "「新戦略（実験中）」は自由に改変可能な独立コピー。",
+        help="「PCA SUB（論文）」は Nakagawa et al. (2026) の実装そのまま。"
+        "「PCA SUB 改良版」は自由に改変可能な独立コピー。",
     )
-    use_exp = strategy_mode == "🧪 新戦略（実験中）"
-
-    st.subheader(f"🎯 今日の売買シグナル（PCA SUB） — {strategy_mode}")
+    use_exp = strategy_mode == "🧪 PCA SUB 改良版"
     st.caption(
+        f"現在の戦略: {strategy_mode} ｜ "
         "サイドバーの終了日に含まれる最新米国取引日のリターンを使用してシグナルを計算します。"
         "米国市場クローズ（東京時間 5:00〔夏〕/ 6:00〔冬〕）後、東証オープン（9:00）までに確認してください。"
     )
