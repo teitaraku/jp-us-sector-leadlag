@@ -17,14 +17,13 @@ from src.strategy import (
     NU,
     US_LABEL,
     US_TICKERS,
-    build_C0,
     build_V0,
     compute_today_signal,
     load_data,
     perf_metrics,
     run_backtest,
 )
-from src.strategy_core import compute_live_signal, run_backtest_loop
+from src.strategy_core import _prepare_prior, _window_state, compute_live_signal, run_backtest_loop
 from src.strategy_exp import compute_return as _exp_return
 from src.strategy_exp import compute_signal as _exp_signal
 
@@ -313,10 +312,10 @@ def main() -> None:
 | 1 | 電機・精密 | +0.082 | 🟢 ロング |
 | 2 | 機械 | +0.071 | 🟢 ロング |
 | ... | ... | ... | ─ |
-| 16 | 公益事業 | −0.065 | 🔴 ショート |
+| 16 | 電力・ガス | −0.065 | 🔴 ショート |
 | 17 | 建設・資材 | −0.078 | 🔴 ショート |
 
-→ **翌朝（日本時間 9:00）に**「電機・精密 ETF (1626.T)」と「機械 ETF (1622.T)」を買い、「公益事業 ETF (1631.T)」と「建設・資材 ETF (1618.T)」を空売りします。
+→ **翌朝（日本時間 9:00）に**「電機・精密 ETF (1625.T)」と「機械 ETF (1624.T)」を買い、「電力・ガス ETF (1627.T)」と「建設・資材 ETF (1619.T)」を空売りします。
 
 → **当日 15:30 までに** すべて反対売買でクローズします。
 """
@@ -560,13 +559,11 @@ def main() -> None:
         fig_v0.update_layout(height=380)
         st.plotly_chart(fig_v0, width="stretch")
 
-        all_cc_full = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna()
-        cfull_data = all_cc_full[all_cc_full.index < "2015-01-01"]
-        if len(cfull_data) < 100:
-            cfull_data = all_cc_full.iloc[:500]
-        Cfull = np.nan_to_num(cfull_data.corr().values)
-        np.fill_diagonal(Cfull, 1.0)
-        C0 = build_C0(V0, Cfull)
+        try:
+            _, C0, all_cc_full = _prepare_prior(us_cc, jp_cc, "2014-12-31")
+        except ValueError as exc:
+            st.error(str(exc))
+            return
 
         st.subheader("事前エクスポージャー行列 C₀")
         st.caption(
@@ -597,12 +594,7 @@ def main() -> None:
         )
         recent = all_cc_full.iloc[-L:]
         if len(recent) >= 10:
-            mu_r = recent.mean().values
-            sig_r = recent.std().values
-            sig_r = np.where(sig_r < 1e-10, 1e-10, sig_r)
-            z_r = np.nan_to_num((recent.values - mu_r) / sig_r)
-            Ct_recent = np.corrcoef(z_r.T)
-            np.fill_diagonal(Ct_recent, 1.0)
+            _, _, Ct_recent = _window_state(recent, C0)
             C_reg_recent = (1 - lam) * Ct_recent + lam * C0
 
             c1, c2 = st.columns(2)

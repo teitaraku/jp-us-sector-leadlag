@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.strategy import (
     JP_TICKERS,
@@ -104,10 +105,10 @@ class TestRunBacktest:
     """合成データで run_backtest の基本動作を検証（yfinance 不使用）"""
 
     @staticmethod
-    def _make_synthetic(n=200, seed=0):
+    def _make_synthetic(n=200, seed=0, start="2010-01-04"):
         rng = np.random.default_rng(seed)
-        us_dates = pd.bdate_range("2016-01-04", periods=n, freq="B")
-        jp_dates = pd.bdate_range("2016-01-04", periods=n + 1, freq="B")  # 末尾に 1 日余分
+        us_dates = pd.bdate_range(start, periods=n, freq="B")
+        jp_dates = pd.bdate_range(start, periods=n + 1, freq="B")  # 末尾に 1 日余分
 
         us_cc = pd.DataFrame(
             rng.standard_normal((n, NU)) * 0.01, index=us_dates, columns=US_TICKERS
@@ -122,12 +123,12 @@ class TestRunBacktest:
 
     def test_output_columns(self):
         us_cc, jp_cc, jp_oc = self._make_synthetic()
-        rets = run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2015-12-31")
+        rets = run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2010-06-30")
         assert set(rets.columns) == {"MOM", "PCA_PLAIN", "PCA_SUB", "DOUBLE"}
 
     def test_output_nonempty(self):
         us_cc, jp_cc, jp_oc = self._make_synthetic()
-        rets = run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2015-12-31")
+        rets = run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2010-06-30")
         assert len(rets) > 0
 
     def test_on_progress_called(self):
@@ -138,7 +139,7 @@ class TestRunBacktest:
             jp_cc,
             jp_oc,
             L=30,
-            cfull_end="2015-12-31",
+            cfull_end="2010-06-30",
             on_progress=lambda s, t: calls.append((s, t)),
         )
         assert len(calls) > 0
@@ -146,6 +147,30 @@ class TestRunBacktest:
     def test_lam_zero_vs_one_differ(self):
         """λ=0（正則化なし）と λ=1（事前のみ）で PCA_SUB シグナルが異なる"""
         us_cc, jp_cc, jp_oc = self._make_synthetic()
-        r0 = run_backtest(us_cc, jp_cc, jp_oc, L=30, lam=0.0, cfull_end="2015-12-31")
-        r1 = run_backtest(us_cc, jp_cc, jp_oc, L=30, lam=1.0, cfull_end="2015-12-31")
+        r0 = run_backtest(us_cc, jp_cc, jp_oc, L=30, lam=0.0, cfull_end="2010-06-30")
+        r1 = run_backtest(us_cc, jp_cc, jp_oc, L=30, lam=1.0, cfull_end="2010-06-30")
         assert not r0["PCA_SUB"].equals(r1["PCA_SUB"])
+
+    def test_requires_paper_cfull_period(self):
+        """論文版の Cfull 推定期間がない場合は、先頭データへの黙示フォールバックをしない"""
+        us_cc, jp_cc, jp_oc = self._make_synthetic(start="2016-01-04")
+        with pytest.raises(ValueError, match="Cfull"):
+            run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2014-12-31")
+
+    def test_us_only_trading_day_pairs_to_next_jp_day(self):
+        """米国だけ営業している日も、次の日本営業日の OC リターンへ対応付ける"""
+        us_cc, jp_cc, jp_oc = self._make_synthetic(n=180)
+        us_only = pd.Timestamp("2010-08-02")
+        us_cc.loc[us_only] = 0.01
+        jp_cc = jp_cc.drop(index=us_only, errors="ignore")
+        jp_oc = jp_oc.drop(index=us_only, errors="ignore")
+
+        rets = run_backtest(
+            us_cc.sort_index(),
+            jp_cc.sort_index(),
+            jp_oc.sort_index(),
+            L=30,
+            cfull_end="2010-06-30",
+        )
+
+        assert us_only in rets.index

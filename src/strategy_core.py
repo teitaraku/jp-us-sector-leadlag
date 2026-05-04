@@ -83,6 +83,9 @@ NJ = len(JP_TICKERS)
 N = NU + NJ
 
 DATA_DIR = Path(__file__).parent / "data"
+PAPER_CFULL_START = pd.Timestamp("2010-01-01")
+PAPER_CFULL_END = pd.Timestamp("2014-12-31")
+MIN_CFULL_OBS = 100
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -242,16 +245,66 @@ def build_C0(V0: np.ndarray, Cfull: np.ndarray) -> np.ndarray:
     return C0
 
 
+def _joint_cc(us_cc: pd.DataFrame, jp_cc: pd.DataFrame) -> pd.DataFrame:
+    return us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna(thresh=N // 2)
+
+
+def _fill_corr_missing(corr: np.ndarray, fallback: np.ndarray) -> np.ndarray:
+    out = corr.copy()
+    missing = ~np.isfinite(out)
+    out[missing] = fallback[missing]
+    out = (out + out.T) / 2.0
+    np.fill_diagonal(out, 1.0)
+    return out
+
+
+def _window_state(
+    window: pd.DataFrame, fallback_corr: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    mu = window.mean(skipna=True).values
+    sigma = window.std(skipna=True, ddof=0).values
+    sigma = np.where((~np.isfinite(sigma)) | (sigma < 1e-10), 1e-10, sigma)
+    min_periods = max(3, min(len(window), len(window) // 2))
+    Ct = window.corr(min_periods=min_periods).values
+    Ct = _fill_corr_missing(Ct, fallback_corr)
+    return mu, sigma, Ct
+
+
 def _prepare_prior(
     us_cc: pd.DataFrame,
     jp_cc: pd.DataFrame,
     cfull_end: str,
 ) -> tuple[np.ndarray, np.ndarray, pd.DataFrame]:
     V0 = build_V0()
-    all_cc = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna(thresh=N // 2)
-    cfull_mask = all_cc.index <= cfull_end
-    cfull_data = all_cc[cfull_mask] if cfull_mask.sum() > 100 else all_cc.iloc[:500]
-    Cfull = np.nan_to_num(cfull_data.corr().values)
+    all_cc = _joint_cc(us_cc, jp_cc)
+    if all_cc.empty:
+        raise ValueError("日米の Close-to-Close リターンが対応するデータがありません。")
+    cfull_end_ts = pd.Timestamp(cfull_end)
+    cfull_start_ts = PAPER_CFULL_START if cfull_end_ts >= PAPER_CFULL_END else all_cc.index.min()
+    if cfull_end_ts >= PAPER_CFULL_END and all_cc.index.min() > PAPER_CFULL_START + pd.Timedelta(
+        days=31
+    ):
+        raise ValueError(
+            "Cfull 推定期間の開始データが不足しています。論文版では 2010-01-01 から "
+            f"{cfull_end_ts.date()} までで Cfull を推定します "
+            f"(現在の最初の利用可能日: {all_cc.index.min().date()})。"
+        )
+    if cfull_end_ts >= PAPER_CFULL_END and all_cc.index.max() < PAPER_CFULL_END:
+        raise ValueError(
+            "Cfull 推定期間の終了データが不足しています。論文版では 2010-01-01 から "
+            f"{cfull_end_ts.date()} までで Cfull を推定します "
+            f"(現在の最後の利用可能日: {all_cc.index.max().date()})。"
+        )
+    cfull_mask = (all_cc.index >= cfull_start_ts) & (all_cc.index <= cfull_end_ts)
+    cfull_data = all_cc[cfull_mask]
+    if len(cfull_data) < MIN_CFULL_OBS:
+        raise ValueError(
+            "Cfull 推定用データが不足しています。論文版では 2010-01-01 から "
+            f"{cfull_end_ts.date()} までのデータが少なくとも {MIN_CFULL_OBS} 行必要です "
+            f"(現在: {len(cfull_data)} 行)。開始日を 2010-01-01 以前にしてください。"
+        )
+    identity = np.eye(N)
+    Cfull = _fill_corr_missing(cfull_data.corr(min_periods=MIN_CFULL_OBS).values, identity)
     np.fill_diagonal(Cfull, 1.0)
     C0 = build_C0(V0, Cfull)
     return V0, C0, all_cc
@@ -276,17 +329,15 @@ def run_backtest_loop(
     _, C0, all_cc = _prepare_prior(us_cc, jp_cc, cfull_end)
 
     jp_dates_arr = jp_oc.index.values
+    us_dates = us_cc[US_TICKERS].dropna(how="all").index
     paired: list[tuple] = []
-    for us_date in all_cc.index:
+    for us_date in us_dates:
         future = jp_dates_arr[jp_dates_arr > us_date]
         if len(future) == 0:
             continue
         next_jp = future[0]
         if next_jp in jp_oc.index:
             paired.append((us_date, next_jp))
-
-    all_cc_arr = all_cc.values.astype(float)
-    idx_map = {d: i for i, d in enumerate(all_cc.index)}
 
     results = {s: [] for s in strategies}
     dates_out: list = []
@@ -296,25 +347,19 @@ def run_backtest_loop(
         if on_progress and step % max(n_pairs // 80, 1) == 0:
             on_progress(step, n_pairs)
 
-        t_idx = idx_map.get(us_date)
-        if t_idx is None or t_idx < L:
+        t_idx = all_cc.index.searchsorted(us_date, side="left")
+        if t_idx < L:
             continue
 
-        window = all_cc_arr[t_idx - L : t_idx]
-        if np.isnan(window).mean() > 0.3:
+        window = all_cc.iloc[t_idx - L : t_idx]
+        if window.isna().to_numpy().mean() > 0.3:
             continue
 
-        mu = np.nanmean(window, axis=0)
-        sigma = np.nanstd(window, axis=0)
-        sigma = np.where(sigma < 1e-10, 1e-10, sigma)
-        z_win = np.nan_to_num((window - mu) / sigma)
+        mu, sigma, Ct = _window_state(window, C0)
 
-        Ct = np.corrcoef(z_win.T)
-        Ct = np.nan_to_num(Ct)
-        np.fill_diagonal(Ct, 1.0)
-
-        us_today = all_cc_arr[t_idx, :NU]
-        z_us = np.nan_to_num((us_today - mu[:NU]) / sigma[:NU])
+        us_today = us_cc.loc[us_date, US_TICKERS].values.astype(float)
+        z_us = (us_today - mu[:NU]) / sigma[:NU]
+        z_us = np.where(np.isfinite(z_us), z_us, 0.0)
 
         target_row = jp_oc.loc[jp_date, JP_TICKERS]
         target = target_row.values.astype(float)
@@ -367,21 +412,16 @@ def compute_live_signal(
     latest_us_date = us_valid.index[-1]
     us_today_row = us_valid.loc[latest_us_date]
 
-    all_cc_window = all_cc[all_cc.index <= latest_us_date]
+    t_idx = all_cc.index.searchsorted(latest_us_date, side="left")
+    all_cc_window = all_cc.iloc[:t_idx]
     if len(all_cc_window) < L:
         raise ValueError(f"ウィンドウ計算に必要なデータが不足しています（必要: {L}日）")
 
-    window = all_cc_window.iloc[-L:].values.astype(float)
-    mu = np.nanmean(window, axis=0)
-    sigma = np.nanstd(window, axis=0)
-    sigma = np.where(sigma < 1e-10, 1e-10, sigma)
-    z_win = np.nan_to_num((window - mu) / sigma)
+    window = all_cc_window.iloc[-L:]
+    mu, sigma, Ct = _window_state(window, C0)
 
-    Ct = np.corrcoef(z_win.T)
-    Ct = np.nan_to_num(Ct)
-    np.fill_diagonal(Ct, 1.0)
-
-    z_us = np.nan_to_num((us_today_row.values.astype(float) - mu[:NU]) / sigma[:NU])
+    z_us = (us_today_row.values.astype(float) - mu[:NU]) / sigma[:NU]
+    z_us = np.where(np.isfinite(z_us), z_us, 0.0)
 
     ctx = StepContext(
         mu=mu,
