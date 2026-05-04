@@ -54,6 +54,32 @@ def _monthly_pivot(series: pd.Series) -> pd.DataFrame:
     return piv
 
 
+def _recent_daily_returns(rets: pd.DataFrame, columns: list[str], days: int = 30) -> pd.DataFrame:
+    recent = rets[columns].dropna(how="all").tail(days)
+    daily = recent.T * 100
+    daily.columns = [pd.Timestamp(d).strftime("%m/%d") for d in daily.columns]
+    return daily
+
+
+def _recent_return_summary(rets: pd.DataFrame, columns: list[str], days: int = 30) -> pd.DataFrame:
+    recent = rets[columns].dropna(how="all").tail(days)
+    rows = []
+    for col in columns:
+        r = recent[col].dropna()
+        if r.empty:
+            continue
+        rows.append(
+            {
+                "戦略": col,
+                f"直近{len(r)}日累積(%)": ((1 + r).prod() - 1) * 100,
+                "平均日次(%)": r.mean() * 100,
+                "勝率(%)": (r > 0).mean() * 100,
+                "マイナス日数": int((r < 0).sum()),
+            }
+        )
+    return pd.DataFrame(rows).set_index("戦略")
+
+
 def render(
     us_cc: pd.DataFrame,
     jp_cc: pd.DataFrame,
@@ -223,6 +249,44 @@ def render(
     # ── 月次リターン・ヒートマップ（PCA SUB 論文 vs 改） ──
     cols_hm = [c for c in ["PCA SUB(論文)", "PCA SUB(改)"] if c in rets_all.columns]
     if cols_hm:
+        st.subheader("PCA SUB 直近30日 日次リターン (%)")
+        st.caption(
+            "直近の損益傾向を確認するための日次棒グラフです。0% を下回る棒が連続する局面は下降トレンドの可能性があります。"
+        )
+        daily = _recent_daily_returns(rets_all, cols_hm)
+        if not daily.empty:
+            fig_d = go.Figure()
+            strategy_colors = {"PCA SUB(論文)": "blue", "PCA SUB(改)": "cornflowerblue"}
+            for strategy in daily.index:
+                vals = daily.loc[strategy]
+                fig_d.add_trace(
+                    go.Bar(
+                        x=daily.columns.tolist(),
+                        y=vals,
+                        name=strategy,
+                        marker_color=strategy_colors.get(strategy, "gray"),
+                        marker_line=dict(color="rgba(0,0,0,0.35)", width=0.5),
+                        text=vals.round(2),
+                        texttemplate="%{text:.2f}",
+                        textposition="outside",
+                    )
+                )
+            fig_d.add_hline(y=0, line_color="gray", line_width=1)
+            fig_d.update_layout(
+                height=360,
+                barmode="group",
+                xaxis_title="日付",
+                yaxis_title="日次リターン (%)",
+                xaxis=dict(tickangle=45),
+                yaxis=dict(zeroline=True),
+                margin=dict(t=20, b=70),
+                legend=dict(x=0.01, y=0.99),
+            )
+            st.plotly_chart(fig_d, width="stretch")
+
+            summary = _recent_return_summary(rets_all, cols_hm)
+            st.dataframe(summary.style.format("{:.2f}"), width="stretch")
+
         st.subheader("PCA SUB 月次リターン (%)")
         st.caption("緑が利益月、赤が損失月です。")
         hm_cols = st.columns(len(cols_hm))
