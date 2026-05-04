@@ -174,6 +174,23 @@ def render(
         legend=dict(x=0.01, y=0.99),
     )
     st.plotly_chart(fig_cum, width="stretch")
+    _, dl1, dl2 = st.columns([2, 1, 1])
+    with dl1:
+        st.download_button(
+            "📥 累積リターン CSV",
+            data=cum.to_csv().encode("utf-8-sig"),
+            file_name="cumulative_returns.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+    with dl2:
+        st.download_button(
+            "📥 日次リターン CSV",
+            data=rets_all.to_csv().encode("utf-8-sig"),
+            file_name="daily_returns.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
 
     # ── ドローダウン ──
     st.subheader("ドローダウン")
