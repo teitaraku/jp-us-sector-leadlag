@@ -34,17 +34,30 @@ python -m streamlit run main.py
 
 ```
 .
-├── main.py             # エントリポイント
+├── main.py                  # エントリポイント
 ├── src/
-│   ├── strategy.py     # 計算ロジック（Streamlit 非依存）
-│   └── dashboard.py    # Streamlit UI
-├── requirements.txt    # 依存パッケージ
-├── pyproject.toml      # ruff / pytest 設定
-├── mise.toml           # Python バージョン管理
+│   ├── dashboard.py         # Streamlit UI ルート（タブ管理・データ取得）
+│   ├── strategies/
+│   │   ├── core.py          # 定数・データ取得・V0/C0 構築・共通ループ・パフォーマンス指標
+│   │   ├── pca_sub.py       # PCA SUB（論文提案手法）
+│   │   ├── pca_plain.py     # PCA PLAIN（正則化なし、ベースライン）
+│   │   ├── mom.py           # MOM（モメンタム、ベースライン）
+│   │   ├── double.py        # DOUBLE（2 段階スクリーニング、ベースライン）
+│   │   └── exp.py           # PCA SUB 改良版（データ駆動型動的 V₀）
+│   └── tabs/
+│       ├── today.py         # 🎯 今日のシグナル
+│       ├── backtest.py      # 📈 バックテスト
+│       ├── data.py          # 📊 データ
+│       ├── analysis.py      # 🔬 モデル分析
+│       ├── howto.py         # 📖 使い方
+│       └── common.py        # 共通スタイル・ヘルパー
+├── requirements.txt         # 依存パッケージ
+├── pyproject.toml           # ruff / pytest 設定
+├── mise.toml                # Python バージョン管理
 ├── tests/
 │   └── test_strategy.py
-├── data/               # parquet キャッシュ（自動生成・git 管理外）
-└── references/         # 論文 PDF
+├── data/                    # parquet キャッシュ（自動生成・git 管理外）
+└── references/              # 論文 PDF
 ```
 
 ## テスト
@@ -53,7 +66,7 @@ python -m streamlit run main.py
 pytest tests/
 ```
 
-`src/strategy.py` の主要関数（`build_V0`・`build_C0`・`perf_metrics`・`run_backtest`）を合成データでユニットテストします。yfinance は使用しません。
+`src/strategies/core.py` の主要関数（`build_V0`・`build_C0`・`perf_metrics`・`run_backtest_loop`）を合成データでユニットテストします。yfinance は使用しません。
 
 ## フォーマット・リント
 
