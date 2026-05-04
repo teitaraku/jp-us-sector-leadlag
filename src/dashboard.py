@@ -246,10 +246,8 @@ def main() -> None:
 """
         )
 
-        col_s1, col_s2, col_s3 = st.columns(3)
-        with col_s1:
-            st.markdown(
-                """
+        st.markdown(
+            """
 ### ① 早朝にシグナル確認
 **東京時間 6:00〜8:30 頃**
 
@@ -260,11 +258,9 @@ def main() -> None:
 3. 表の上部の青いバナーで **使用した米国リターン日** と **日本発注日** を確認する
 4. 🟢 **ロング（緑）** の銘柄 → 今日、日本市場で **買う**
 5. 🔴 **ショート（赤）** の銘柄 → 今日、日本市場で **空売りする**（または保有中なら売却）
-"""
-            )
-        with col_s2:
-            st.markdown(
-                """
+
+---
+
 ### ② 日本市場オープン時に発注
 **東京時間 9:00 直後**
 
@@ -274,11 +270,9 @@ def main() -> None:
 - ポジション数は通常 **ロング 5 銘柄 / ショート 5 銘柄**（q=0.30 時）
 
 > 💡 **注意**: 寄付直後は流動性が低い場合があります。NEXT FUNDS TOPIX-17 ETF は出来高が少ない銘柄もあるため、指値での発注を推奨します。
-"""
-            )
-        with col_s3:
-            st.markdown(
-                """
+
+---
+
 ### ③ 日本市場クローズ前に決済
 **東京時間 15:00〜15:30 頃**
 
@@ -288,7 +282,7 @@ def main() -> None:
 
 > ⚠️ **翌日に持ち越しはしません。** シグナルは翌朝にリセットされるため、毎日クローズが原則です。
 """
-            )
+        )
 
         st.markdown("---")
 
@@ -726,19 +720,21 @@ def main() -> None:
                 "PCA PLAIN": "正則化なし PCA。日米結合相関行列を固有分解してリードラグシグナルを抽出。",
                 "MOM": "モメンタム。米国業種リターンをそのまま日本業種シグナルに使うシンプルなベースライン。",
             }
-            for key in ["PCA SUB(論文)", "PCA SUB(改)", "DOUBLE", "PCA PLAIN", "MOM"]:
-                if key not in metrics.index:
-                    continue
-                row = metrics.loc[key]
-                with st.container(border=True):
-                    label_col, ar_col, risk_col, rr_col, mdd_col = st.columns([2, 1, 1, 1, 1])
-                    label_col.metric(label=key, value="", help=_STRAT_HELP.get(key, ""))
-                    ar_col.metric("AR (%)", f"{row['AR(%)']:.2f}", help=_METRIC_HELP["AR(%)"])
-                    risk_col.metric(
-                        "RISK (%)", f"{row['RISK(%)']:.2f}", help=_METRIC_HELP["RISK(%)"]
-                    )
-                    rr_col.metric("R/R", f"{row['R/R']:.2f}", help=_METRIC_HELP["R/R"])
-                    mdd_col.metric("MDD (%)", f"{row['MDD(%)']:.2f}", help=_METRIC_HELP["MDD(%)"])
+            order = [k for k in ["PCA SUB(論文)", "PCA SUB(改)", "DOUBLE", "PCA PLAIN", "MOM"] if k in metrics.index]
+            tbl = metrics.loc[order].copy()
+            st.dataframe(
+                tbl.style.apply(_color_best).format("{:.2f}"),
+                use_container_width=True,
+                column_config={
+                    "AR(%)":   st.column_config.NumberColumn("AR (%)",   help=_METRIC_HELP["AR(%)"]),
+                    "RISK(%)": st.column_config.NumberColumn("RISK (%)", help=_METRIC_HELP["RISK(%)"]),
+                    "R/R":     st.column_config.NumberColumn("R/R",      help=_METRIC_HELP["R/R"]),
+                    "MDD(%)":  st.column_config.NumberColumn("MDD (%)",  help=_METRIC_HELP["MDD(%)"]),
+                },
+            )
+            with st.expander("各戦略の説明"):
+                for key in order:
+                    st.markdown(f"**{key}** — {_STRAT_HELP[key]}")
 
             # ── 累積リターン ──
             st.subheader("累積リターン推移")
