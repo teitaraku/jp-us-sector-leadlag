@@ -82,7 +82,7 @@ NU = len(US_TICKERS)
 NJ = len(JP_TICKERS)
 N = NU + NJ
 
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path(__file__).parent.parent.parent / "data"
 PAPER_CFULL_START = pd.Timestamp("2010-01-01")
 PAPER_CFULL_END = pd.Timestamp("2014-12-31")
 MIN_CFULL_OBS = 100
@@ -284,9 +284,12 @@ def _prepare_prior(
     if cfull_start is not None:
         cfull_start_ts = pd.Timestamp(cfull_start)
     else:
-        cfull_start_ts = PAPER_CFULL_START if cfull_end_ts >= PAPER_CFULL_END else all_cc.index.min()
-        if cfull_end_ts >= PAPER_CFULL_END and all_cc.index.min() > PAPER_CFULL_START + pd.Timedelta(
-            days=31
+        cfull_start_ts = (
+            PAPER_CFULL_START if cfull_end_ts >= PAPER_CFULL_END else all_cc.index.min()
+        )
+        if (
+            cfull_end_ts >= PAPER_CFULL_END
+            and all_cc.index.min() > PAPER_CFULL_START + pd.Timedelta(days=31)
         ):
             raise ValueError(
                 "Cfull 推定期間の開始データが不足しています。論文版では 2010-01-01 から "

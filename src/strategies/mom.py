@@ -7,7 +7,7 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
-from src.strategy_core import NU, StepContext, ls_ret, run_backtest_loop
+from src.strategies.core import NU, StepContext, ls_ret, run_backtest_loop
 
 CFULL_END = "2014-12-31"
 
@@ -32,7 +32,13 @@ def run_backtest(
     backtest_start: str | None = None,
 ) -> pd.DataFrame:
     return run_backtest_loop(
-        us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q,
+        us_cc,
+        jp_cc,
+        jp_oc,
+        L=L,
+        lam=lam,
+        K=K,
+        q=q,
         cfull_end=CFULL_END,
         strategies={"MOM": compute_return},
         on_progress=on_progress,

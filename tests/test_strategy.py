@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.strategy_core import (
+from src.strategies.core import (
     JP_TICKERS,
     NJ,
     NU,
@@ -15,19 +15,28 @@ from src.strategy_core import (
     perf_metrics,
     run_backtest_loop,
 )
-from src.strategy_double import compute_return as _double
-from src.strategy_mom import compute_return as _mom
-from src.strategy_pca_plain import compute_return as _pca_plain
-from src.strategy_pca_sub import compute_return as _pca_sub
+from src.strategies.double import compute_return as _double
+from src.strategies.mom import compute_return as _mom
+from src.strategies.pca_plain import compute_return as _pca_plain
+from src.strategies.pca_sub import compute_return as _pca_sub
 
 _ALL_STRATEGIES = {"MOM": _mom, "PCA_PLAIN": _pca_plain, "PCA_SUB": _pca_sub, "DOUBLE": _double}
 
 
-def _run_backtest(us_cc, jp_cc, jp_oc, L=60, lam=0.9, K=3, q=0.30,
-                  cfull_end="2014-12-31", on_progress=None):
+def _run_backtest(
+    us_cc, jp_cc, jp_oc, L=60, lam=0.9, K=3, q=0.30, cfull_end="2014-12-31", on_progress=None
+):
     return run_backtest_loop(
-        us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q,
-        cfull_end=cfull_end, strategies=_ALL_STRATEGIES, on_progress=on_progress,
+        us_cc,
+        jp_cc,
+        jp_oc,
+        L=L,
+        lam=lam,
+        K=K,
+        q=q,
+        cfull_end=cfull_end,
+        strategies=_ALL_STRATEGIES,
+        on_progress=on_progress,
     )
 
 

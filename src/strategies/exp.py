@@ -1,6 +1,6 @@
 """
 実験的戦略モジュール — PCA SUB(改) のカスタマイズ用サンドボックス
-compute_signal を変更しても src/strategy_pca_sub.py の論文実装には影響しない。
+compute_signal を変更しても src/strategies/pca_sub.py の論文実装には影響しない。
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from scipy import linalg
 
-from src.strategy_core import NJ, NU, StepContext, compute_live_signal, ls_ret, run_backtest_loop
+from src.strategies.core import NJ, NU, StepContext, compute_live_signal, ls_ret, run_backtest_loop
 
 # ── 事前相関行列 Cfull の推定期間（論文版は 2010-01-01〜2014-12-31） ─────────
 # パンデミック後の市場構造を反映するため直近5年に更新
@@ -50,7 +50,13 @@ def run_backtest(
     backtest_start: str | None = None,
 ) -> pd.DataFrame:
     return run_backtest_loop(
-        us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q,
+        us_cc,
+        jp_cc,
+        jp_oc,
+        L=L,
+        lam=lam,
+        K=K,
+        q=q,
         cfull_end=CFULL_END,
         cfull_start=CFULL_START,
         strategies={"PCA_SUB": compute_return},
@@ -69,7 +75,13 @@ def run_live_signal(
     q: float = 0.30,
 ) -> dict:
     return compute_live_signal(
-        us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q,
+        us_cc,
+        jp_cc,
+        jp_oc,
+        L=L,
+        lam=lam,
+        K=K,
+        q=q,
         cfull_end=CFULL_END,
         cfull_start=CFULL_START,
         signal_fn=compute_signal,
