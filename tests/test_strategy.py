@@ -1,10 +1,10 @@
-"""strategy.py のユニットテスト"""
+"""戦略ロジックのユニットテスト"""
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.strategy import (
+from src.strategy_core import (
     JP_TICKERS,
     NJ,
     NU,
@@ -13,8 +13,22 @@ from src.strategy import (
     build_C0,
     build_V0,
     perf_metrics,
-    run_backtest,
+    run_backtest_loop,
 )
+from src.strategy_double import compute_return as _double
+from src.strategy_mom import compute_return as _mom
+from src.strategy_pca_plain import compute_return as _pca_plain
+from src.strategy_pca_sub import compute_return as _pca_sub
+
+_ALL_STRATEGIES = {"MOM": _mom, "PCA_PLAIN": _pca_plain, "PCA_SUB": _pca_sub, "DOUBLE": _double}
+
+
+def _run_backtest(us_cc, jp_cc, jp_oc, L=60, lam=0.9, K=3, q=0.30,
+                  cfull_end="2014-12-31", on_progress=None):
+    return run_backtest_loop(
+        us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q,
+        cfull_end=cfull_end, strategies=_ALL_STRATEGIES, on_progress=on_progress,
+    )
 
 
 class TestBuildV0:
@@ -123,18 +137,18 @@ class TestRunBacktest:
 
     def test_output_columns(self):
         us_cc, jp_cc, jp_oc = self._make_synthetic()
-        rets = run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2010-06-30")
+        rets = _run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2010-06-30")
         assert set(rets.columns) == {"MOM", "PCA_PLAIN", "PCA_SUB", "DOUBLE"}
 
     def test_output_nonempty(self):
         us_cc, jp_cc, jp_oc = self._make_synthetic()
-        rets = run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2010-06-30")
+        rets = _run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2010-06-30")
         assert len(rets) > 0
 
     def test_on_progress_called(self):
         us_cc, jp_cc, jp_oc = self._make_synthetic()
         calls = []
-        run_backtest(
+        _run_backtest(
             us_cc,
             jp_cc,
             jp_oc,
@@ -147,15 +161,15 @@ class TestRunBacktest:
     def test_lam_zero_vs_one_differ(self):
         """λ=0（正則化なし）と λ=1（事前のみ）で PCA_SUB シグナルが異なる"""
         us_cc, jp_cc, jp_oc = self._make_synthetic()
-        r0 = run_backtest(us_cc, jp_cc, jp_oc, L=30, lam=0.0, cfull_end="2010-06-30")
-        r1 = run_backtest(us_cc, jp_cc, jp_oc, L=30, lam=1.0, cfull_end="2010-06-30")
+        r0 = _run_backtest(us_cc, jp_cc, jp_oc, L=30, lam=0.0, cfull_end="2010-06-30")
+        r1 = _run_backtest(us_cc, jp_cc, jp_oc, L=30, lam=1.0, cfull_end="2010-06-30")
         assert not r0["PCA_SUB"].equals(r1["PCA_SUB"])
 
     def test_requires_paper_cfull_period(self):
         """論文版の Cfull 推定期間がない場合は、先頭データへの黙示フォールバックをしない"""
         us_cc, jp_cc, jp_oc = self._make_synthetic(start="2016-01-04")
         with pytest.raises(ValueError, match="Cfull"):
-            run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2014-12-31")
+            _run_backtest(us_cc, jp_cc, jp_oc, L=30, cfull_end="2014-12-31")
 
     def test_us_only_trading_day_pairs_to_next_jp_day(self):
         """米国だけ営業している日も、次の日本営業日の OC リターンへ対応付ける"""
@@ -165,7 +179,7 @@ class TestRunBacktest:
         jp_cc = jp_cc.drop(index=us_only, errors="ignore")
         jp_oc = jp_oc.drop(index=us_only, errors="ignore")
 
-        rets = run_backtest(
+        rets = _run_backtest(
             us_cc.sort_index(),
             jp_cc.sort_index(),
             jp_oc.sort_index(),

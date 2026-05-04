@@ -10,22 +10,29 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from src.strategy import (
+from src.strategy_core import (
     JP_LABEL,
     JP_TICKERS,
     NJ,
     NU,
     US_LABEL,
     US_TICKERS,
+    _prepare_prior,
+    _window_state,
     build_V0,
-    compute_today_signal,
     load_data,
     perf_metrics,
-    run_backtest,
+    run_backtest_loop,
 )
-from src.strategy_core import _prepare_prior, _window_state, compute_live_signal, run_backtest_loop
-from src.strategy_exp import compute_return as _exp_return
-from src.strategy_exp import compute_signal as _exp_signal
+from src.strategy_double import compute_return as _double
+from src.strategy_exp import run_backtest as _exp_run_backtest
+from src.strategy_exp import run_live_signal as _exp_run_live_signal
+from src.strategy_mom import compute_return as _mom
+from src.strategy_pca_plain import compute_return as _pca_plain
+from src.strategy_pca_sub import compute_return as _pca_sub
+from src.strategy_pca_sub import run_live_signal as _pca_sub_live
+
+_PAPER_STRATEGIES = {"MOM": _mom, "PCA_PLAIN": _pca_plain, "PCA_SUB": _pca_sub, "DOUBLE": _double}
 
 st.set_page_config(
     page_title="日米業種リードラグ投資戦略",
@@ -205,12 +212,18 @@ def main() -> None:
         )
 
     # ── データ取得 ────────────────────────────────────
+    # C_full 推定（2010-2014年）とローリングウィンドウのため、常に 2010-01-01 から取得する
+    fetch_start = min(start, "2010-01-01")
     with st.spinner("価格データを取得中…"):
         try:
-            us_cc, jp_cc, jp_oc, us_close, jp_close = _load_data(start, end)
+            us_cc, jp_cc, jp_oc, us_close, jp_close = _load_data(fetch_start, end)
         except Exception as exc:
             st.error(f"データ取得に失敗しました: {exc}")
             return
+    # 表示用：ユーザーが選択した開始日にスライス
+    us_cc_view = us_cc.loc[start:]
+    jp_cc_view = jp_cc.loc[start:]
+    jp_oc_view = jp_oc.loc[start:]
 
     # ── タブ ─────────────────────────────────────────
     tab_today, tab_bt, tab_data, tab_sig, tab_over = st.tabs(
@@ -439,7 +452,7 @@ def main() -> None:
             st.caption(
                 "SPDR 11 業種 ETF の Close-to-Close（前日終値→当日終値）リターンを累積した推移です。戦略の入力シグナル源となるデータです。"
             )
-            cum_us = (1 + us_cc[US_TICKERS]).cumprod()
+            cum_us = (1 + us_cc_view[US_TICKERS]).cumprod()
             fig = go.Figure()
             for t in US_TICKERS:
                 if t in cum_us.columns:
@@ -456,7 +469,7 @@ def main() -> None:
             st.caption(
                 "NEXT FUNDS TOPIX-17 ETF の Open-to-Close（寄付→引け）リターンを累積した推移です。戦略が予測・売買するターゲットデータです。"
             )
-            cum_jp = (1 + jp_oc[JP_TICKERS]).cumprod()
+            cum_jp = (1 + jp_oc_view[JP_TICKERS]).cumprod()
             fig = go.Figure()
             for t in JP_TICKERS:
                 if t in cum_jp.columns:
@@ -472,7 +485,7 @@ def main() -> None:
         st.caption(
             "米国 11 業種 × 日本 17 業種の 28×28 全期間相関行列です。赤が正の相関、青が負の相関を示します。右上の米日ブロックがリードラグ構造の可視化です。"
         )
-        all_cc = us_cc[US_TICKERS].join(jp_cc[JP_TICKERS], how="inner").dropna()
+        all_cc = us_cc_view[US_TICKERS].join(jp_cc_view[JP_TICKERS], how="inner").dropna()
         if len(all_cc) > 0:
             corr = all_cc.corr()
             labels_all = [US_LABEL[t] for t in US_TICKERS] + [JP_LABEL[t] for t in JP_TICKERS]
@@ -504,13 +517,13 @@ def main() -> None:
             st.write("**米国業種 ETF（CC ベース）**")
             us_st = pd.DataFrame(
                 {
-                    "年率リターン(%)": (us_cc[US_TICKERS].mean() * 252 * 100).round(2),
-                    "年率ボラ(%)": (us_cc[US_TICKERS].std() * np.sqrt(252) * 100).round(2),
+                    "年率リターン(%)": (us_cc_view[US_TICKERS].mean() * 252 * 100).round(2),
+                    "年率ボラ(%)": (us_cc_view[US_TICKERS].std() * np.sqrt(252) * 100).round(2),
                     "Sharpe": (
-                        us_cc[US_TICKERS].mean() / us_cc[US_TICKERS].std() * np.sqrt(252)
+                        us_cc_view[US_TICKERS].mean() / us_cc_view[US_TICKERS].std() * np.sqrt(252)
                     ).round(2),
-                    "Skew": us_cc[US_TICKERS].skew().round(2),
-                    "Kurt": us_cc[US_TICKERS].kurt().round(2),
+                    "Skew": us_cc_view[US_TICKERS].skew().round(2),
+                    "Kurt": us_cc_view[US_TICKERS].kurt().round(2),
                 }
             )
             us_st.index = [US_LABEL[t] for t in US_TICKERS]
@@ -520,13 +533,13 @@ def main() -> None:
             st.write("**日本業種 ETF（OC ベース）**")
             jp_st = pd.DataFrame(
                 {
-                    "年率リターン(%)": (jp_oc[JP_TICKERS].mean() * 252 * 100).round(2),
-                    "年率ボラ(%)": (jp_oc[JP_TICKERS].std() * np.sqrt(252) * 100).round(2),
+                    "年率リターン(%)": (jp_oc_view[JP_TICKERS].mean() * 252 * 100).round(2),
+                    "年率ボラ(%)": (jp_oc_view[JP_TICKERS].std() * np.sqrt(252) * 100).round(2),
                     "Sharpe": (
-                        jp_oc[JP_TICKERS].mean() / jp_oc[JP_TICKERS].std() * np.sqrt(252)
+                        jp_oc_view[JP_TICKERS].mean() / jp_oc_view[JP_TICKERS].std() * np.sqrt(252)
                     ).round(2),
-                    "Skew": jp_oc[JP_TICKERS].skew().round(2),
-                    "Kurt": jp_oc[JP_TICKERS].kurt().round(2),
+                    "Skew": jp_oc_view[JP_TICKERS].skew().round(2),
+                    "Kurt": jp_oc_view[JP_TICKERS].kurt().round(2),
                 }
             )
             jp_st.index = [JP_LABEL[t] for t in JP_TICKERS]
@@ -643,20 +656,19 @@ def main() -> None:
                             0.5 + step / total * 0.5, text=f"新戦略を計算中… {step}/{total}"
                         )
 
-                    rets_p = run_backtest(
-                        us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q, on_progress=on_progress_p
-                    )
-                    rets_e = run_backtest_loop(
-                        us_cc,
-                        jp_cc,
-                        jp_oc,
-                        L=L,
-                        lam=lam,
-                        K=K,
-                        q=q,
+                    rets_p = run_backtest_loop(
+                        us_cc, jp_cc, jp_oc,
+                        L=L, lam=lam, K=K, q=q,
                         cfull_end="2014-12-31",
-                        strategies={"PCA_SUB": _exp_return},
+                        strategies=_PAPER_STRATEGIES,
+                        on_progress=on_progress_p,
+                        backtest_start=start,
+                    )
+                    rets_e = _exp_run_backtest(
+                        us_cc, jp_cc, jp_oc,
+                        L=L, lam=lam, K=K, q=q,
                         on_progress=on_progress_e,
+                        backtest_start=start,
                     )
                     prog.empty()
                     st.session_state["rets_paper"] = rets_p
@@ -897,19 +909,9 @@ def main() -> None:
 
         try:
             sig_result = (
-                compute_live_signal(
-                    us_cc,
-                    jp_cc,
-                    jp_oc,
-                    L=L,
-                    lam=lam,
-                    K=K,
-                    q=q,
-                    cfull_end="2014-12-31",
-                    signal_fn=_exp_signal,
-                )
+                _exp_run_live_signal(us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q)
                 if use_exp
-                else compute_today_signal(us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q)
+                else _pca_sub_live(us_cc, jp_cc, jp_oc, L=L, lam=lam, K=K, q=q)
             )
         except Exception as exc:
             st.error(f"シグナル計算に失敗しました: {exc}")

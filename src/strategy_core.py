@@ -274,30 +274,40 @@ def _prepare_prior(
     us_cc: pd.DataFrame,
     jp_cc: pd.DataFrame,
     cfull_end: str,
+    cfull_start: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray, pd.DataFrame]:
     V0 = build_V0()
     all_cc = _joint_cc(us_cc, jp_cc)
     if all_cc.empty:
         raise ValueError("日米の Close-to-Close リターンが対応するデータがありません。")
     cfull_end_ts = pd.Timestamp(cfull_end)
-    cfull_start_ts = PAPER_CFULL_START if cfull_end_ts >= PAPER_CFULL_END else all_cc.index.min()
-    if cfull_end_ts >= PAPER_CFULL_END and all_cc.index.min() > PAPER_CFULL_START + pd.Timedelta(
-        days=31
-    ):
-        raise ValueError(
-            "Cfull 推定期間の開始データが不足しています。論文版では 2010-01-01 から "
-            f"{cfull_end_ts.date()} までで Cfull を推定します "
-            f"(現在の最初の利用可能日: {all_cc.index.min().date()})。"
-        )
-    if cfull_end_ts >= PAPER_CFULL_END and all_cc.index.max() < PAPER_CFULL_END:
-        raise ValueError(
-            "Cfull 推定期間の終了データが不足しています。論文版では 2010-01-01 から "
-            f"{cfull_end_ts.date()} までで Cfull を推定します "
-            f"(現在の最後の利用可能日: {all_cc.index.max().date()})。"
-        )
+    if cfull_start is not None:
+        cfull_start_ts = pd.Timestamp(cfull_start)
+    else:
+        cfull_start_ts = PAPER_CFULL_START if cfull_end_ts >= PAPER_CFULL_END else all_cc.index.min()
+        if cfull_end_ts >= PAPER_CFULL_END and all_cc.index.min() > PAPER_CFULL_START + pd.Timedelta(
+            days=31
+        ):
+            raise ValueError(
+                "Cfull 推定期間の開始データが不足しています。論文版では 2010-01-01 から "
+                f"{cfull_end_ts.date()} までで Cfull を推定します "
+                f"(現在の最初の利用可能日: {all_cc.index.min().date()})。"
+            )
+        if cfull_end_ts >= PAPER_CFULL_END and all_cc.index.max() < PAPER_CFULL_END:
+            raise ValueError(
+                "Cfull 推定期間の終了データが不足しています。論文版では 2010-01-01 から "
+                f"{cfull_end_ts.date()} までで Cfull を推定します "
+                f"(現在の最後の利用可能日: {all_cc.index.max().date()})。"
+            )
     cfull_mask = (all_cc.index >= cfull_start_ts) & (all_cc.index <= cfull_end_ts)
     cfull_data = all_cc[cfull_mask]
     if len(cfull_data) < MIN_CFULL_OBS:
+        if cfull_start is not None:
+            raise ValueError(
+                f"Cfull 推定用データが不足しています（{cfull_start_ts.date()} ～ {cfull_end_ts.date()}）。"
+                f"少なくとも {MIN_CFULL_OBS} 行必要ですが現在 {len(cfull_data)} 行です。"
+                "バックテスト開始日を推定期間より前に設定してください。"
+            )
         raise ValueError(
             "Cfull 推定用データが不足しています。論文版では 2010-01-01 から "
             f"{cfull_end_ts.date()} までのデータが少なくとも {MIN_CFULL_OBS} 行必要です "
@@ -324,14 +334,19 @@ def run_backtest_loop(
     cfull_end: str,
     strategies: dict[str, Callable[[StepContext], float]],
     on_progress: Callable[[int, int], None] | None = None,
+    cfull_start: str | None = None,
+    backtest_start: str | None = None,
 ) -> pd.DataFrame:
     """戦略名→関数の辞書を受け取り、全戦略のロングショートリターン系列を返す。"""
-    _, C0, all_cc = _prepare_prior(us_cc, jp_cc, cfull_end)
+    _, C0, all_cc = _prepare_prior(us_cc, jp_cc, cfull_end, cfull_start)
 
     jp_dates_arr = jp_oc.index.values
     us_dates = us_cc[US_TICKERS].dropna(how="all").index
+    backtest_start_ts = pd.Timestamp(backtest_start) if backtest_start else None
     paired: list[tuple] = []
     for us_date in us_dates:
+        if backtest_start_ts is not None and us_date < backtest_start_ts:
+            continue
         future = jp_dates_arr[jp_dates_arr > us_date]
         if len(future) == 0:
             continue
@@ -401,9 +416,10 @@ def compute_live_signal(
     q: float,
     cfull_end: str,
     signal_fn: Callable[[StepContext], np.ndarray],
+    cfull_start: str | None = None,
 ) -> dict:
     """任意の compute_signal 関数を使い、最新米国リターンから日本業種 ETF のシグナルを計算する。"""
-    _, C0, all_cc = _prepare_prior(us_cc, jp_cc, cfull_end)
+    _, C0, all_cc = _prepare_prior(us_cc, jp_cc, cfull_end, cfull_start)
 
     us_valid = us_cc[US_TICKERS].dropna(how="all")
     if len(us_valid) == 0:
