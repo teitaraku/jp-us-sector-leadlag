@@ -132,6 +132,7 @@ def render(
                 prog.empty()
                 st.session_state["rets_paper"] = rets_p
                 st.session_state["rets_exp"] = rets_e
+                st.session_state["backtest_params"] = dict(L=L, lam=lam, K=K, q=q)
                 st.success(f"完了！ {len(rets_p)} 日分のリターンを計算しました。")
             except Exception as exc:
                 st.error(f"エラー: {exc}")
@@ -148,6 +149,14 @@ def render(
 
     rets_all = rets_p.rename(columns=_RENAME_P).join(
         rets_e[["PCA_SUB"]].rename(columns={"PCA_SUB": "PCA SUB(改)"}), how="outer"
+    )
+
+    _param_title = (
+        (lambda p: f"実行時パラメータ: L={p['L']}  λ={p['lam']}  K={p['K']}  q={p['q']}")(
+            st.session_state["backtest_params"]
+        )
+        if "backtest_params" in st.session_state
+        else "（バックテストを再実行するとパラメータが表示されます）"
     )
 
     # ── パフォーマンス指標 ──
@@ -180,6 +189,7 @@ def render(
     st.subheader("累積リターン推移")
     st.caption(
         "初期値 1 を基準とした資産成長曲線です。値が大きいほど累積収益が高いことを示します。"
+        "計算方式は複利再投資（幾何累積）で、毎日の損益を含む全額を翌日も再投資した場合の資産成長を表します（累積リターン = ∏(1 + r_t)）。"
     )
     cum = (1 + rets_all).cumprod()
     fig_cum = go.Figure()
@@ -196,6 +206,8 @@ def render(
             )
     fig_cum.update_layout(
         height=450,
+        title=_param_title,
+        title_font_size=13,
         yaxis_title="累積リターン",
         xaxis_title="日付",
         hovermode="x unified",
@@ -240,6 +252,8 @@ def render(
             )
     fig_dd.update_layout(
         height=350,
+        title=_param_title,
+        title_font_size=13,
         yaxis_title="ドローダウン (%)",
         xaxis_title="日付",
         hovermode="x unified",
@@ -274,12 +288,14 @@ def render(
             fig_d.add_hline(y=0, line_color="gray", line_width=1)
             fig_d.update_layout(
                 height=360,
+                title=_param_title,
+                title_font_size=13,
                 barmode="group",
                 xaxis_title="日付",
                 yaxis_title="日次リターン (%)",
                 xaxis=dict(tickangle=45),
                 yaxis=dict(zeroline=True),
-                margin=dict(t=20, b=70),
+                margin=dict(t=40, b=70),
                 legend=dict(x=0.01, y=0.99),
             )
             st.plotly_chart(fig_d, width="stretch")
@@ -328,6 +344,8 @@ def render(
     fig_sh.add_hline(y=0, line_dash="dash", line_color="gray")
     fig_sh.update_layout(
         height=350,
+        title=_param_title,
+        title_font_size=13,
         yaxis_title="シャープレシオ（年率）",
         xaxis_title="日付",
         hovermode="x unified",
@@ -353,6 +371,8 @@ def render(
             )
     fig_ann.update_layout(
         height=380,
+        title=_param_title,
+        title_font_size=13,
         barmode="group",
         yaxis_title="年次リターン (%)",
         xaxis_title="年",
