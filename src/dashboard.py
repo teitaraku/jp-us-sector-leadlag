@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from src.strategies.core import load_data
-from src.tabs import analysis, backtest, data, howto, optimize, today
+from src.tabs import analysis, backtest, data, gap_analysis, howto, optimize, today
 from src.tabs.common import TAB_CSS
 
 st.set_page_config(
@@ -141,11 +141,12 @@ def main() -> None:
     jp_oc_view = jp_oc.loc[start:]
 
     # ── タブ ─────────────────────────────────────────
-    tab_today, tab_bt, tab_opt, tab_data, tab_sig, tab_over = st.tabs(
+    tab_today, tab_bt, tab_opt, tab_gap, tab_data, tab_sig, tab_over = st.tabs(
         [
             "🎯 今日のシグナル",
             "📈 バックテスト",
             "🔎 パラメータ探索",
+            "🔍 ギャップ分析",
             "📊 データ",
             "🔬 モデル分析",
             "📖 使い方",
@@ -163,6 +164,9 @@ def main() -> None:
 
     with tab_bt:
         backtest.render(us_cc, jp_cc, jp_oc, L, lam, K, q, start)
+
+    with tab_gap:
+        gap_analysis.render(us_cc, jp_cc, jp_oc, L, lam, K, q, start)
 
     with tab_opt:
         optimize.render(us_cc, jp_cc, jp_oc, start)
